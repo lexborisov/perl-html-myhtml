@@ -25,7 +25,7 @@ $myhtml->parse($tree, $encoding, $body);
 
 # print result
 print "Print HTML Tree:\n";
-$tree->document->print_childs($tree, *STDOUT, 0);
+$tree->document->print_children($tree, *STDOUT, 0);
 
 
 $tree->destroy();

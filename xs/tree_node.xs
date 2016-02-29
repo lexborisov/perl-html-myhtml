@@ -301,7 +301,7 @@ print(node, tree, fh, inc)
 #=sort 23
 
 void
-print_childs(node, tree, fh, inc)
+print_children(node, tree, fh, inc)
 	HTML::MyHTML::Tree::Node node;
 	HTML::MyHTML::Tree tree;
 	FILE* fh;

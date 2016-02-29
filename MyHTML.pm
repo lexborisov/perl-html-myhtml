@@ -22,7 +22,7 @@ use strict;
 use vars qw($AUTOLOAD $VERSION $ABSTRACT @ISA @EXPORT);
 
 BEGIN {
-	$VERSION = 0.23;
+	$VERSION = 0.24;
 	$ABSTRACT = "Fast HTML Parser using Threads with no outside dependencies";
 	
 	@ISA = qw(Exporter DynaLoader);
@@ -140,6 +140,8 @@ This Parser based on L<MyHTML library|https://github.com/lexborisov/myhtml>  (it
 
 =item * Passes all tree construction tests from L<html5lib-tests|https://github.com/html5lib/html5lib-tests>
 
+See latest version on L<https://github.com/lexborisov/perl-html-myhtml|https://github.com/lexborisov/perl-html-myhtml>
+
 =back
 
 =head1 SYNOPSIS
@@ -160,7 +162,7 @@ This Parser based on L<MyHTML library|https://github.com/lexborisov/myhtml>  (it
  
  # print result
  print "Print HTML Tree:\n";
- $tree->document->print_childs($tree, *STDOUT, 0);
+ $tree->document->print_children($tree, *STDOUT, 0);
  
  print "\nGet all DIV elements of HTML Tree:\n";
  my $list = $tree->get_elements_by_tag_name("div");
@@ -674,11 +676,11 @@ Print a node
 
  $node->print($tree, $fh, $inc);
 
-=head3 print_childs
+=head3 print_children
 
 Print tree of a node. Print excluding current node
 
- $node->print_childs($tree, $fh, $inc);
+ $node->print_children($tree, $fh, $inc);
 
 =head3 print_all
 
