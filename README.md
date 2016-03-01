@@ -1,5 +1,6 @@
-HTML::MyHTML
-==============================
+# HTML::MyHTML
+
+[![Build Status](https://travis-ci.org/lexborisov/perl-html-myhtml.svg?branch=master)](https://travis-ci.org/lexborisov/perl-html-myhtml)
 
 HTML::MyHTML is a fast HTML Parser using Threads with no outside dependencies
 
