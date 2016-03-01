@@ -41,7 +41,7 @@ my $fdfdf = WriteMakefile(
     LICENSE        => 'Apache 2.0',
     LINKTYPE       => 'dynamic',
     LIBS           => ["-lpthread"],
-	OBJECT         => [@$LIST_OBJECTS, "MyHTML.o"],
+	LDFROM         => join(" ", @$LIST_OBJECTS, "MyHTML.o"),
 	INC            => "-I$myhtml_source_dir",
 	#MYEXTLIB       => "$myhtml_source_dir/myhtml/myhtml.o",
 	clean          => {FILES => "$myhtml_source_dir/myhtml/*libmyhtml* $myhtml_source_dir/*.o $myhtml_source_dir/myhtml/*.o $myhtml_source_dir/myhtml/utils/*.o"}
@@ -55,7 +55,7 @@ sub postamble {
 		my @list;
 		
 		foreach my $name (@{$MYINSTALLER::LIST_COMPILE}) {
-			push @list, "\t". '$(CC) -Wall -Werror -O2 -fPIC --std=c99 -pthread $(INC) -c '. $name;
+			push @list, "\t". '$(CC) -Wall -Werror -O2 -fPIC --std=c99 -D_POSIX_C_SOURCE=199309L -pthread $(INC) -c '. $name;
 		}
 		
         return join "\n", @list;
