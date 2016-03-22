@@ -51,23 +51,14 @@ myhtml_status_t myhtml_init(myhtml_t* myhtml, enum myhtml_options opt, size_t th
     if(mcstatus != MCOBJECT_ASYNC_STATUS_OK)
         return MyHTML_STATUS_ERROR_MEMORY_ALLOCATION;
     
-    myhtml->tags = myhtml_tag_create();
-    if(myhtml->tags == NULL) {
-        myhtml->parse_state_func = NULL;
-        myhtml->insertion_func = NULL;
-        myhtml->thread = NULL;
-        
-        return MyHTML_STATUS_TAGS_ERROR_MEMORY_ALLOCATION;
-    }
+    // for tags node and other
+    myhtml->mchar = mchar_async_create(64, 4096);
     
-    status = myhtml_tag_init(myhtml->tags);
-    if(status) {
-        myhtml->parse_state_func = NULL;
-        myhtml->insertion_func = NULL;
-        myhtml->thread = NULL;
-        
-        return status;
-    }
+    myhtml->tag_index = mcobject_async_create();
+    mcstatus = mcobject_async_init(myhtml->tag_index, 128, 1024, sizeof(myhtml_tag_index_node_t));
+    
+    if(mcstatus != MCOBJECT_ASYNC_STATUS_OK)
+        return MyHTML_STATUS_TAGS_ERROR_MCOBJECT_CREATE;
     
     status = myhtml_tokenizer_state_init(myhtml);
     if(status) {
@@ -87,6 +78,14 @@ myhtml_status_t myhtml_init(myhtml_t* myhtml, enum myhtml_options opt, size_t th
     myhtml->opt = opt;
     myhtml->thread = mythread_create();
     
+#ifdef MyHTML_BUILD_WITHOUT_THREADS
+    
+    status = mythread_init(myhtml->thread, NULL, thread_count, queue_size);
+    
+    if(status)
+        return status;
+    
+#else /* MyHTML_BUILD_WITHOUT_THREADS */
     switch (opt) {
         case MyHTML_OPTIONS_PARSE_MODE_SINGLE:
             status = mythread_init(myhtml->thread, "lastmac", 0, queue_size);
@@ -148,6 +147,8 @@ myhtml_status_t myhtml_init(myhtml_t* myhtml, enum myhtml_options opt, size_t th
             break;
     }
     
+#endif /* MyHTML_BUILD_WITHOUT_THREADS */
+    
     myhtml_clean(myhtml);
     
     return status;
@@ -155,8 +156,8 @@ myhtml_status_t myhtml_init(myhtml_t* myhtml, enum myhtml_options opt, size_t th
 
 void myhtml_clean(myhtml_t* myhtml)
 {
-    mythread_queue_clean(myhtml->thread->queue);
     mythread_clean(myhtml->thread);
+    
     mcobject_async_node_all_clean(myhtml->async_incoming_buf);
 }
 
@@ -167,11 +168,12 @@ myhtml_t* myhtml_destroy(myhtml_t* myhtml)
     
     myhtml_destroy_marker(myhtml);
     
-    mythread_destroy(myhtml->thread, mytrue);
+    mythread_destroy(myhtml->thread, true);
     myhtml_tokenizer_state_destroy(myhtml);
     
-    myhtml->async_incoming_buf  = mcobject_async_destroy(myhtml->async_incoming_buf, mytrue);
-    myhtml->tags                = myhtml_tag_destroy(myhtml->tags);
+    myhtml->async_incoming_buf = mcobject_async_destroy(myhtml->async_incoming_buf, true);
+    myhtml->tag_index = mcobject_async_destroy(myhtml->tag_index, true);
+    myhtml->mchar = mchar_async_destroy(myhtml->mchar, true);
     
     if(myhtml->insertion_func)
         free(myhtml->insertion_func);
@@ -337,18 +339,6 @@ myhtml_encoding_t myhtml_encoding_get(myhtml_tree_t* tree)
     return tree->encoding;
 }
 
-
-/*
- * Helpers
- */
-myhtml_tag_t * myhtml_get_tag(myhtml_t* myhtml)
-{
-    if(myhtml)
-        return myhtml->tags;
-    
-    return NULL;
-}
-
 /*
  * Nodes
  */
@@ -402,9 +392,8 @@ myhtml_collection_t * myhtml_get_nodes_by_tag_id(myhtml_tree_t* tree, myhtml_col
 
 myhtml_collection_t * myhtml_get_nodes_by_name(myhtml_tree_t* tree, myhtml_collection_t *collection, const char* html, size_t length, myhtml_status_t *status)
 {
-    mctree_index_t tag_ctx_idx = mctree_search_lowercase(tree->myhtml->tags->tree, html, length);
-    
-    return myhtml_get_nodes_by_tag_id(tree, collection, tag_ctx_idx, status);
+    const myhtml_tag_context_t *tag_ctx = myhtml_tag_get_by_name(tree->tags, html, length);
+    return myhtml_get_nodes_by_tag_id(tree, collection, tag_ctx->id, status);
 }
 
 /*
@@ -517,9 +506,9 @@ myhtml_tree_node_t * myhtml_node_insert_to_appropriate_place(myhtml_tree_t* tree
     
     enum myhtml_tree_insertion_mode mode;
     
-    tree->foster_parenting = mytrue;
+    tree->foster_parenting = true;
     target = myhtml_tree_appropriate_place_inserting_in_tree(tree, target, &mode);
-    tree->foster_parenting = myfalse;
+    tree->foster_parenting = false;
     
     myhtml_tree_node_insert_by_mode(tree, target, node, mode);
     
@@ -599,7 +588,7 @@ myhtml_string_t * myhtml_node_text_set_with_charef(myhtml_tree_t* tree, myhtml_t
             node->token->my_str_tm.length = 0;
     }
     
-    myhtml_string_char_ref_chunk_t str_chunk = {0, 0, 0, {}, 0, encoding};
+    myhtml_string_char_ref_chunk_t str_chunk = {0, 0, 0, {0}, 0, encoding};
     myhtml_encoding_result_clean(&str_chunk.res);
     
     myhtml_string_append_charef(&str_chunk, &node->token->my_str_tm, text, length);
@@ -623,43 +612,42 @@ myhtml_tag_id_t myhtml_node_tag_id(myhtml_tree_node_t *node)
 
 const char * myhtml_tag_name_by_id(myhtml_tree_t* tree, myhtml_tag_id_t tag_id, size_t *length)
 {
-    if(tree == NULL || tree->myhtml == NULL || tree->myhtml->tags == NULL ||
-       tree->myhtml->tags->context_length <= tag_id)
-    {
-        if(length)
-            *length = 0;
-        
-        return NULL;
-    }
+    if(length)
+        *length = 0;
     
-    mctree_node_t* mctree_nodes = tree->myhtml->tags->tree->nodes;
-    size_t mcid = tree->myhtml->tags->context[tag_id].mctree_id;
+    if(tree == NULL || tree->tags == NULL)
+        return NULL;
+    
+    const myhtml_tag_context_t *ctx = myhtml_tag_get_by_id(tree->tags, tag_id);
+    
+    if(ctx == NULL)
+        return NULL;
     
     if(length)
-        *length = mctree_nodes[mcid].str_size;
+        *length = ctx->name_length;
     
-    return mctree_nodes[mcid].str;
+    return ctx->name;
 }
 
 myhtml_tag_id_t myhtml_tag_id_by_name(myhtml_tree_t* tree, const char *tag_name, size_t length)
 {
-    if(tree == NULL || tree->myhtml == NULL || tree->myhtml->tags == NULL)
+    if(tree == NULL || tree->tags == NULL)
         return MyHTML_TAG__UNDEF;
     
-    myhtml_tag_t* tags = tree->myhtml->tags;
-    mctree_t* tags_tree = tags->tree;
+    const myhtml_tag_context_t *ctx = myhtml_tag_get_by_name(tree->tags, tag_name, length);
     
-    mctree_index_t idx = mctree_search_lowercase(tree->myhtml->tags->tree, tag_name, length);
+    if(ctx == NULL)
+        return MyHTML_TAG__UNDEF;
     
-    return (myhtml_tag_id_t)(tags_tree->nodes[idx].value);
+    return ctx->id;
 }
 
-mybool_t myhtml_node_is_close_self(myhtml_tree_node_t *node)
+bool myhtml_node_is_close_self(myhtml_tree_node_t *node)
 {
     if(node->token)
         return (node->token->type & MyHTML_TOKEN_TYPE_CLOSE_SELF);
     
-    return myfalse;
+    return false;
 }
 
 myhtml_tree_attr_t * myhtml_node_attribute_first(myhtml_tree_node_t *node)
@@ -1003,30 +991,30 @@ const char * myhtml_tree_incomming_buf_make_data(myhtml_tree_t *tree, mythread_q
     return tree->temp_tag_name.data;
 }
 
-mybool_t myhtml_utils_strcmp(const char* ab, const char* to_lowercase, size_t size)
+bool myhtml_utils_strcmp(const char* ab, const char* to_lowercase, size_t size)
 {
     size_t i = 0;
     
     for(;;) {
         if(i == size)
-            return mytrue;
+            return true;
         
         if((const unsigned char)(to_lowercase[i] > 0x40 && to_lowercase[i] < 0x5b ?
                                  (to_lowercase[i]|0x60) : to_lowercase[i]) != (const unsigned char)ab[i])
         {
-            return myfalse;
+            return false;
         }
         
         i++;
     }
     
-    return myfalse;
+    return false;
 }
 
-mybool_t myhtml_is_html_node(myhtml_tree_node_t *node, myhtml_tag_id_t tag_id)
+bool myhtml_is_html_node(myhtml_tree_node_t *node, myhtml_tag_id_t tag_id)
 {
     if(node == NULL)
-        return myfalse;
+        return false;
     
     return node->tag_idx == tag_id && node->my_namespace == MyHTML_NAMESPACE_HTML;
 }

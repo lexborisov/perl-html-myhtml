@@ -35,7 +35,7 @@ extern "C" {
 
 #define MyHTML_STRING_REALLOC_IF_NEED(__str__, __count__, __upto__)         \
     if((__str__->length + __count__) >= __str__->size) {                    \
-        myhtml_string_release(__str__, (str->size + __upto__));             \
+        myhtml_string_release(__str__, (__str__->length + __count__ + __upto__)); \
     }                                                                       \
 
 #define MyHTML_STRING_APPEND_BYTE_WITHOUT_REALLOC(__byte__, __str__)   \
@@ -77,7 +77,7 @@ struct myhtml_string_char_ref_chunk {
     long l_data;
     
     charef_entry_result_t charef_res;
-    mybool_t is_attributes;
+    bool is_attributes;
     
     myhtml_encoding_t encoding;
     myhtml_encoding_result_t res;
@@ -91,7 +91,7 @@ char * myhtml_string_realloc(mchar_async_t *mchar, size_t node_id, myhtml_string
 
 void myhtml_string_clean(myhtml_string_t* str);
 void myhtml_string_clean_all(myhtml_string_t* str);
-myhtml_string_t * myhtml_string_destroy(myhtml_string_t* str, mybool_t destroy_obj);
+myhtml_string_t * myhtml_string_destroy(myhtml_string_t* str, bool destroy_obj);
 
 char * myhtml_string_data_alloc(mchar_async_t *mchar, size_t node_id, size_t size);
 char * myhtml_string_data_realloc(mchar_async_t *mchar, size_t node_id, char *data,  size_t len_to_copy, size_t size);

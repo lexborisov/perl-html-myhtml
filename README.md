@@ -6,7 +6,7 @@ HTML::MyHTML is a fast HTML Parser using Threads with no outside dependencies
 
 # DESCRIPTION
 
-This Parser based on [MyHTML library] (it includes version 0.4.5)
+This Parser based on [MyHTML library] (it includes version 0.5.2)
 
 - Asynchronous Parsing, Build Tree and Indexation
 - Fully conformant with the [HTML5 specification]

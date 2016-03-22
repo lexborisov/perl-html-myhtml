@@ -5,7 +5,7 @@ DESCRIPTION
 
 Fast HTML Parser using Threads with no outside dependencies
 
-This Parser based on MyHTML library  (it includes version 0.4.5)
+This Parser based on MyHTML library  (it includes version 0.5.2)
 
 See https://github.com/lexborisov/myhtml 
 

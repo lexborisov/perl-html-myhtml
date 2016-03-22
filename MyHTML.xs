@@ -20,7 +20,29 @@
 #include "perl.h"
 #include "XSUB.h"
 
-#include <myhtml/api.h>
+#include "source/myhtml/charef.c"
+#include "source/myhtml/encoding.c"
+#include "source/myhtml/encoding_detect.c"
+#include "source/myhtml/myhtml.c"
+#include "source/myhtml/myosi.c"
+#include "source/myhtml/mystring.c"
+#include "source/myhtml/parser.c"
+#include "source/myhtml/perf.c"
+#include "source/myhtml/rules.c"
+#include "source/myhtml/tag.c"
+#include "source/myhtml/tag_init.c"
+#include "source/myhtml/thread.c"
+#include "source/myhtml/token.c"
+#include "source/myhtml/tokenizer.c"
+#include "source/myhtml/tokenizer_doctype.c"
+#include "source/myhtml/tokenizer_end.c"
+#include "source/myhtml/tokenizer_script.c"
+#include "source/myhtml/tree.c"
+#include "source/myhtml/utils/mchar_async.c"
+#include "source/myhtml/utils/mcobject_async.c"
+#include "source/myhtml/utils/mcsync.c"
+#include "source/myhtml/utils/mctree.c"
+#include "source/myhtml/utils.c"
 
 typedef myhtml_t * HTML__MyHTML;
 typedef myhtml_tree_t * HTML__MyHTML__Tree;
@@ -441,16 +463,6 @@ parse_chunk_end(myhtml, tree)
 		RETVAL = myhtml_parse_chunk_end(tree);
 	OUTPUT:
 		RETVAL
-
-HTML::MyHTML::Tag
-get_tag(myhtml)
-	HTML::MyHTML myhtml;
-	
-	CODE:
-		RETVAL = myhtml_get_tag(myhtml);
-	OUTPUT:
-		RETVAL
-
 
 #************************************************************************************
 #
@@ -1067,11 +1079,10 @@ MODULE = HTML::MyHTML::Tag  PACKAGE = HTML::MyHTML::Tag
 PROTOTYPES: DISABLE
 
 HTML::MyHTML::Tag::Index
-tag_index_create(tag)
-	HTML::MyHTML::Tag tag;
+tag_index_create(void)
 	
 	CODE:
-		RETVAL = myhtml_tag_index_create(tag);
+		RETVAL = myhtml_tag_index_create();
 	OUTPUT:
 		RETVAL
 

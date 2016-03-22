@@ -33,21 +33,30 @@
  */
 
 #define MyHTML_VERSION_MAJOR 0
-#define MyHTML_VERSION_MINOR 4
-#define MyHTML_VERSION_PATCH 5
+#define MyHTML_VERSION_MINOR 5
+#define MyHTML_VERSION_PATCH 2
 
+#include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
+
+#if defined(_MSC_VER)
+#  define MyHTML_DEPRECATED(func, message) __declspec(deprecated(message)) func
+#elif defined(__GNUC__) || defined(__INTEL_COMPILER)
+#  define MyHTML_DEPRECATED(func, message) func __attribute__((deprecated(message)))
+#else
+#  define MyHTML_DEPRECATED(func, message) func
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include <stdio.h>
 
-/**
- * bool
- */
-typedef enum {myfalse = 0, mytrue = 1} mybool_t;
+typedef enum {
+    myfalse = 0,
+    mytrue  = 1
+} MyHTML_DEPRECATED(mybool_t, "use bool");
 
 /**
  * encodings type
@@ -671,16 +680,6 @@ myhtml_parse_chunk_fragment_single(myhtml_tree_t* tree, const char* html, size_t
 myhtml_status_t
 myhtml_parse_chunk_end(myhtml_tree_t* tree);
 
-/**
- * Get myhtml_tag_t* from a myhtml_t*
- *
- * @param[in] myhtml_t*
- *
- * @return myhtml_tag_t* if exists, otherwise a NULL value
- */
-myhtml_tag_t*
-myhtml_get_tag(myhtml_t* myhtml);
-
 /***********************************************************************************
  *
  * MyHTML_TREE
@@ -793,6 +792,26 @@ myhtml_tree_get_tag_index(myhtml_tree_t* tree);
  */
 myhtml_tree_node_t*
 myhtml_tree_get_document(myhtml_tree_t* tree);
+
+/**
+ * Get node HTML (Document -> HTML, Root of HTML Document)
+ *
+ * @param[in] myhtml_tree_t*
+ *
+ * @return myhtml_tree_node_t* if successful, otherwise a NULL value
+ */
+myhtml_tree_node_t*
+myhtml_tree_get_node_html(myhtml_tree_t* tree);
+
+/**
+ * Get node BODY (Document -> HTML -> BODY)
+ *
+ * @param[in] myhtml_tree_t*
+ *
+ * @return myhtml_tree_node_t* if successful, otherwise a NULL value
+ */
+myhtml_tree_node_t*
+myhtml_tree_get_node_body(myhtml_tree_t* tree);
 
 /**
  * Get mchar_async_t object
@@ -1128,9 +1147,9 @@ myhtml_tag_id_by_name(myhtml_tree_t* tree,
  *
  * @param[in] myhtml_tree_node_t*
  *
- * @return mytrue or myfalse (1 or 0)
+ * @return true or false (1 or 0)
  */
-mybool_t
+bool
 myhtml_node_is_close_self(myhtml_tree_node_t *node);
 
 /**
@@ -1294,7 +1313,6 @@ myhtml_attribute_remove_by_key(myhtml_tree_node_t *node, const char *key, size_t
  * @param[in] myhtml_tree_node_t*
  * @param[in] myhtml_tree_attr_t*
  *
- * @return myhtml_tree_attr_t* if successful, otherwise a NULL value
  */
 void
 myhtml_attribute_delete(myhtml_tree_t *tree, myhtml_tree_node_t *node,
@@ -1325,7 +1343,7 @@ myhtml_attribute_free(myhtml_tree_t *tree, myhtml_tree_attr_t *attr);
  * @return myhtml_tag_index_t* if successful, otherwise a NULL value
  */
 myhtml_tag_index_t*
-myhtml_tag_index_create(myhtml_tag_t* tag);
+myhtml_tag_index_create(void);
 
 /**
  * Allocating and Initialization resources for a tag index structure
@@ -1555,9 +1573,9 @@ myhtml_encoding_codepoint_to_ascii_utf_16(size_t codepoint, char *data);
  * @param[in]  text length
  * @param[out] detected encoding
  *
- * @return mytrue if encoding found, otherwise myfalse
+ * @return true if encoding found, otherwise false
  */
-mybool_t
+bool
 myhtml_encoding_detect(const char *text, size_t length, myhtml_encoding_t *encoding);
 
 /**
@@ -1569,9 +1587,9 @@ myhtml_encoding_detect(const char *text, size_t length, myhtml_encoding_t *encod
  * @param[in]  text length
  * @param[out] detected encoding
  *
- * @return mytrue if encoding found, otherwise myfalse
+ * @return true if encoding found, otherwise false
  */
-mybool_t
+bool
 myhtml_encoding_detect_russian(const char *text, size_t length, myhtml_encoding_t *encoding);
 
 /**
@@ -1583,9 +1601,9 @@ myhtml_encoding_detect_russian(const char *text, size_t length, myhtml_encoding_
  * @param[in]  text length
  * @param[out] detected encoding
  *
- * @return mytrue if encoding found, otherwise myfalse
+ * @return true if encoding found, otherwise false
  */
-mybool_t
+bool
 myhtml_encoding_detect_unicode(const char *text, size_t length, myhtml_encoding_t *encoding);
 
 /**
@@ -1597,9 +1615,9 @@ myhtml_encoding_detect_unicode(const char *text, size_t length, myhtml_encoding_
  * @param[in]  text length
  * @param[out] detected encoding
  *
- * @return mytrue if encoding found, otherwise myfalse
+ * @return true if encoding found, otherwise false
  */
-mybool_t
+bool
 myhtml_encoding_detect_bom(const char *text, size_t length, myhtml_encoding_t *encoding);
 
 /***********************************************************************************
@@ -1667,10 +1685,10 @@ myhtml_string_clean_all(myhtml_string_t* str);
  * @param[in] myhtml_string_t*. See description for myhtml_string_init function
  * @param[in] call free function for current object or not
  *
- * @return NULL if destroy_obj set mytrue, otherwise a current myhtml_string_t object
+ * @return NULL if destroy_obj set true, otherwise a current myhtml_string_t object
  */
 myhtml_string_t*
-myhtml_string_destroy(myhtml_string_t* str, mybool_t destroy_obj);
+myhtml_string_destroy(myhtml_string_t* str, bool destroy_obj);
 
 /**
  * Get data (char*) from a myhtml_string_t object

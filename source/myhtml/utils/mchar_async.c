@@ -81,7 +81,7 @@ mchar_async_t * mchar_async_destroy(mchar_async_t *mchar_async, int destroy_self
         for (size_t node_idx = 0; node_idx < mchar_async->nodes_length; node_idx++)
         {
             mchar_async_node_t *node = &mchar_async->nodes[node_idx];
-            mchar_async_cache_destroy(&node->cache, myfalse);
+            mchar_async_cache_destroy(&node->cache, false);
         }
         
         free(mchar_async->nodes);
@@ -110,7 +110,7 @@ mchar_async_t * mchar_async_destroy(mchar_async_t *mchar_async, int destroy_self
         mchar_async->chunks = NULL;
     }
     
-    mchar_async_cache_destroy(&mchar_async->chunk_cache, myfalse);
+    mchar_async_cache_destroy(&mchar_async->chunk_cache, false);
     
     mchar_async->mcsync = mcsync_destroy(mchar_async->mcsync, 1);
     
@@ -141,7 +141,7 @@ void mchar_async_mem_malloc(mchar_async_t *mchar_async, mchar_async_node_t *node
         chunk->size = mchar_async->origin_size;
         
         if(length > chunk->size)
-            chunk->size += length;
+            chunk->size = length;
         
         chunk->begin = (char*)mymalloc(chunk->size * sizeof(char));
     }
@@ -276,7 +276,7 @@ void mchar_async_node_delete(mchar_async_t *mchar_async, size_t node_idx)
     }
     
     if(node->cache.nodes)
-        free(node->cache.nodes);
+        mchar_async_cache_destroy(&node->cache, false);
     
     memset(node, 0, sizeof(mchar_async_node_t));
     
@@ -406,10 +406,10 @@ char * mchar_async_realloc(mchar_async_t *mchar_async, size_t node_idx, char *da
         size_t next_size = (node->chunk->length - curr_size) + new_size;
         
         if(next_size <= node->chunk->size) {
-            node->chunk->length = next_size;
-            
             /* it`s Magic */
-            *((size_t*)(&node->chunk->begin[ ((node->chunk->length - new_size) - sizeof(size_t)) ])) = new_size;
+            *((size_t*)(&node->chunk->begin[ ((node->chunk->length - curr_size) - sizeof(size_t)) ])) = new_size;
+            
+            node->chunk->length = next_size;
             
             return data;
         }
@@ -508,7 +508,7 @@ void mchar_async_cache_clean(mchar_async_cache_t *cache)
     }
 }
 
-mchar_async_cache_t * mchar_async_cache_destroy(mchar_async_cache_t *cache, mybool_t self_destroy)
+mchar_async_cache_t * mchar_async_cache_destroy(mchar_async_cache_t *cache, bool self_destroy)
 {
     if(cache == NULL)
         return NULL;

@@ -26,6 +26,8 @@ extern "C" {
 
 #include "myhtml/myosi.h"
 
+#ifndef MyHTML_BUILD_WITHOUT_THREADS
+
 #if !defined(IS_OS_WINDOWS)
 #   include <pthread.h>
 #   include <semaphore.h>
@@ -41,8 +43,19 @@ extern "C" {
 #include "myhtml/tree.h"
 #include "myhtml/mystring.h"
 
-#define MyTHREAD_SEM_NAME "mythread"
+#endif /* MyHTML_BUILD_WITHOUT_THREADS */
 
+#define MyTHREAD_SEM_NAME "myhtml"
+
+
+#ifdef MyHTML_BUILD_WITHOUT_THREADS
+
+struct mythread {
+    mythread_queue_t *queue;
+    int sys_last_error;
+};
+
+#else /* MyHTML_BUILD_WITHOUT_THREADS */
 
 void mythread_function_stream(void *arg);
 void mythread_function_batch(void *arg);
@@ -109,13 +122,17 @@ struct mythread {
     volatile mythread_thread_opt_t batch_opt;
 };
 
+mythread_id_t myhread_create_stream(mythread_t *mythread, mythread_f func, myhtml_status_t *status);
+mythread_id_t myhread_create_batch(mythread_t *mythread, mythread_f func, myhtml_status_t *status, size_t count);
+
+void myhtml_thread_nanosleep(const struct timespec *tomeout);
+    
+#endif
+
 mythread_t * mythread_create(void);
 myhtml_status_t mythread_init(mythread_t *mythread, const char *sem_prefix, size_t thread_count, size_t queue_size);
 void mythread_clean(mythread_t *mythread);
-mythread_t * mythread_destroy(mythread_t *mythread, mybool_t self_destroy);
-
-mythread_id_t myhread_create_stream(mythread_t *mythread, mythread_f func, myhtml_status_t *status);
-mythread_id_t myhread_create_batch(mythread_t *mythread, mythread_f func, myhtml_status_t *status, size_t count);
+mythread_t * mythread_destroy(mythread_t *mythread, bool self_destroy);
 
 void mythread_stream_pause_all(mythread_t *mythread);
 void mythread_batch_pause_all(mythread_t *mythread);
@@ -125,8 +142,6 @@ void mythread_resume_all(mythread_t *mythread);
 
 void mythread_stream_quit_all(mythread_t *mythread);
 void mythread_batch_quit_all(mythread_t *mythread);
-
-void myhtml_thread_nanosleep(const struct timespec *tomeout);
 
 // queue
 struct mythread_queue_node {
@@ -163,6 +178,8 @@ mythread_queue_t * mythread_queue_destroy(mythread_queue_t* token);
 
 void mythread_queue_node_clean(mythread_queue_node_t* qnode);
 
+size_t mythread_queue_count_used_node(mythread_queue_t* queue);
+mythread_queue_node_t * mythread_queue_get_first_node(mythread_queue_t* queue);
 mythread_queue_node_t * mythread_queue_get_prev_node(mythread_queue_t* queue);
 mythread_queue_node_t * mythread_queue_get_current_node(mythread_queue_t* queue);
 mythread_queue_node_t * mythread_queue_node_malloc(mythread_queue_t* queue, const char* text, size_t begin, myhtml_status_t *status);

@@ -14,7 +14,6 @@ xs/tree.xs
 xs/tree_attr.xs
 xs/tree_node.xs
 
-source/Makefile
 source/myhtml/api.h
 source/myhtml/api_encoding.h
 source/myhtml/charef.c
@@ -23,7 +22,6 @@ source/myhtml/def.h
 source/myhtml/encoding.c
 source/myhtml/encoding.h
 source/myhtml/encoding_detect.c
-source/myhtml/Makefile
 source/myhtml/myhtml.c
 source/myhtml/myhtml.h
 source/myhtml/myosi.c
