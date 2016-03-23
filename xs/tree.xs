@@ -95,6 +95,34 @@ document(tree)
 	OUTPUT:
 		RETVAL
 
+HTML::MyHTML::Tree::Node
+html(tree)
+	HTML::MyHTML::Tree tree;
+	
+	CODE:
+		RETVAL = myhtml_tree_get_node_html(tree);
+	OUTPUT:
+		RETVAL
+
+HTML::MyHTML::Tree::Node
+head(tree)
+	HTML::MyHTML::Tree tree;
+	
+	CODE:
+		RETVAL = myhtml_tree_get_node_head(tree);
+	OUTPUT:
+		RETVAL
+
+HTML::MyHTML::Tree::Node
+body(tree)
+	HTML::MyHTML::Tree tree;
+	
+	CODE:
+		RETVAL = myhtml_tree_get_node_body(tree);
+	OUTPUT:
+		RETVAL
+
+
 #=sort 8
 
 mchar_async_t*

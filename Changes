@@ -1,3 +1,8 @@
+0.27	Wed Mar 23 2016 11:37:03 GMT+0300
+	  Added a forgotten file due to which nothing has worked
+	  Added example clear_text.pl
+	  Added methods for tree: html, head, body -- get nodes
+
 0.26	Tue Mar 22 2016 17:43:03 GMT+0300
 	  Fixes for compile program. Add MyHTML 0.5.2
 

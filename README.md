@@ -6,7 +6,7 @@ HTML::MyHTML is a fast HTML Parser using Threads with no outside dependencies
 
 # DESCRIPTION
 
-This Parser based on [MyHTML library] (it includes version 0.5.2)
+This Parser based on [MyHTML library] (it includes version 0.5.3)
 
 - Asynchronous Parsing, Build Tree and Indexation
 - Fully conformant with the [HTML5 specification]
@@ -303,6 +303,39 @@ Get Tree Document (Root of Tree)
 
 ```perl
  my $node = $tree->document();
+```
+
+Return: HTML::MyHTML::Tree::Node if successful, otherwise a UNDEF value
+
+
+### html
+
+Get node HTML (Document -> HTML, Root of HTML Document)
+
+```perl
+ my $node = $tree->html();
+```
+
+Return: HTML::MyHTML::Tree::Node if successful, otherwise a UNDEF value
+
+
+### head
+
+Get node HEAD (Document -> HTML -> HEAD)
+
+```perl
+ my $node = $tree->head();
+```
+
+Return: HTML::MyHTML::Tree::Node if successful, otherwise a UNDEF value
+
+
+### body
+
+Get node BODY (Document -> HTML -> BODY)
+
+```perl
+ my $node = $tree->body();
 ```
 
 Return: HTML::MyHTML::Tree::Node if successful, otherwise a UNDEF value

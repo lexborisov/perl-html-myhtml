@@ -22,7 +22,7 @@ use strict;
 use vars qw($AUTOLOAD $VERSION $ABSTRACT @ISA @EXPORT);
 
 BEGIN {
-	$VERSION = 0.26;
+	$VERSION = 0.27;
 	$ABSTRACT = "Fast HTML Parser using Threads with no outside dependencies";
 	
 	@ISA = qw(Exporter DynaLoader);
@@ -114,7 +114,7 @@ HTML::MyHTML is a fast HTML Parser using Threads with no outside dependencies
 
 =head1 DESCRIPTION
 
-This Parser based on L<MyHTML library|https://github.com/lexborisov/myhtml>  (it includes version 0.4.5)
+This Parser based on L<MyHTML library|https://github.com/lexborisov/myhtml>  (it includes version 0.5.3)
 
 =over 4
 
@@ -379,6 +379,33 @@ Return: HTML::MyHTML::Tag::Index if exists, otherwise a UNDEF value
 Get Tree Document (Root of Tree)
 
  my $node = $tree->document();
+
+Return: HTML::MyHTML::Tree::Node if successful, otherwise a UNDEF value
+
+
+=head3 html
+
+Get node HTML (Document -> HTML, Root of HTML Document)
+
+ my $node = $tree->html();
+
+Return: HTML::MyHTML::Tree::Node if successful, otherwise a UNDEF value
+
+
+=head3 head
+
+Get node HEAD (Document -> HTML -> HEAD)
+
+ my $node = $tree->head();
+
+Return: HTML::MyHTML::Tree::Node if successful, otherwise a UNDEF value
+
+
+=head3 body
+
+Get node BODY (Document -> HTML -> BODY)
+
+ my $node = $tree->body();
 
 Return: HTML::MyHTML::Tree::Node if successful, otherwise a UNDEF value
 

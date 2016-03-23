@@ -9,6 +9,7 @@ t/000_create.t  Base test file
 typemap			
 
 examples/detect_encoding.pl
+examples/clear_text.pl
 
 xs/tree.xs
 xs/tree_attr.xs
@@ -59,6 +60,7 @@ source/myhtml/utils/mcsync.c
 source/myhtml/utils/mcsync.h
 source/myhtml/utils/mctree.c
 source/myhtml/utils/mctree.h
+source/myhtml/utils/resources.h
 source/myhtml/utils.c
 source/myhtml/utils.h
 
