@@ -1,3 +1,13 @@
+0.31	Mon Mar 28 2016 16:15:03 GMT+0300
+	Build for Windows
+	Now memory is used more wisely.
+	Now for threads can register any number of Trees.
+	Fixed all leaks when creating a large number of Trees.
+	Fixed cmake file. Now build normally in Linux.
+	Fixed many problem with string preprocessing.
+	Now, is not afraid of binary files and other trash.
+	Any fixes to improve stability.
+
 0.27	Wed Mar 23 2016 11:37:03 GMT+0300
 	  Added a forgotten file due to which nothing has worked
 	  Added example clear_text.pl

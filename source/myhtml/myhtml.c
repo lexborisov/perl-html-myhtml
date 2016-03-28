@@ -187,8 +187,6 @@ myhtml_status_t myhtml_parse(myhtml_tree_t* tree, myhtml_encoding_t encoding, co
 {
     if(tree->flags & MyHTML_TREE_FLAGS_PARSE_END) {
         myhtml_tree_clean(tree);
-        mythread_queue_clean(tree->queue);
-        mythread_clean(tree->myhtml->thread);
     }
     
     myhtml_encoding_set(tree, encoding);
@@ -201,11 +199,8 @@ myhtml_status_t myhtml_parse(myhtml_tree_t* tree, myhtml_encoding_t encoding, co
 
 myhtml_status_t myhtml_parse_fragment(myhtml_tree_t* tree, myhtml_encoding_t encoding, const char* html, size_t html_size, myhtml_tag_id_t tag_id, enum myhtml_namespace my_namespace)
 {
-    if(tree->flags & MyHTML_TREE_FLAGS_PARSE_END)
-    {
+    if(tree->flags & MyHTML_TREE_FLAGS_PARSE_END) {
         myhtml_tree_clean(tree);
-        mythread_queue_clean(tree->queue);
-        mythread_clean(tree->myhtml->thread);
     }
     
     if(tag_id == 0)
@@ -227,8 +222,6 @@ myhtml_status_t myhtml_parse_single(myhtml_tree_t* tree, myhtml_encoding_t encod
 {
     if(tree->flags & MyHTML_TREE_FLAGS_PARSE_END) {
         myhtml_tree_clean(tree);
-        mythread_queue_clean(tree->queue);
-        mythread_clean(tree->myhtml->thread);
     }
     
     tree->flags |= MyHTML_TREE_FLAGS_SINGLE_MODE;
@@ -243,11 +236,8 @@ myhtml_status_t myhtml_parse_single(myhtml_tree_t* tree, myhtml_encoding_t encod
 
 myhtml_status_t myhtml_parse_fragment_single(myhtml_tree_t* tree, myhtml_encoding_t encoding, const char* html, size_t html_size, myhtml_tag_id_t tag_id, enum myhtml_namespace my_namespace)
 {
-    if(tree->flags & MyHTML_TREE_FLAGS_PARSE_END)
-    {
+    if(tree->flags & MyHTML_TREE_FLAGS_PARSE_END) {
         myhtml_tree_clean(tree);
-        mythread_queue_clean(tree->queue);
-        mythread_clean(tree->myhtml->thread);
     }
     
     if(tag_id == 0)
@@ -269,11 +259,8 @@ myhtml_status_t myhtml_parse_fragment_single(myhtml_tree_t* tree, myhtml_encodin
 
 myhtml_status_t myhtml_parse_chunk(myhtml_tree_t* tree, const char* html, size_t html_size)
 {
-    if(tree->flags & MyHTML_TREE_FLAGS_PARSE_END)
-    {
+    if(tree->flags & MyHTML_TREE_FLAGS_PARSE_END) {
         myhtml_tree_clean(tree);
-        mythread_queue_clean(tree->queue);
-        mythread_clean(tree->myhtml->thread);
     }
     
     myhtml_tokenizer_chunk(tree, html, html_size);
@@ -283,11 +270,8 @@ myhtml_status_t myhtml_parse_chunk(myhtml_tree_t* tree, const char* html, size_t
 
 myhtml_status_t myhtml_parse_chunk_fragment(myhtml_tree_t* tree, const char* html, size_t html_size, myhtml_tag_id_t tag_id, enum myhtml_namespace my_namespace)
 {
-    if(tree->flags & MyHTML_TREE_FLAGS_PARSE_END)
-    {
+    if(tree->flags & MyHTML_TREE_FLAGS_PARSE_END) {
         myhtml_tree_clean(tree);
-        mythread_queue_clean(tree->queue);
-        mythread_clean(tree->myhtml->thread);
     }
     
     if(tag_id == 0)
@@ -588,7 +572,7 @@ myhtml_string_t * myhtml_node_text_set_with_charef(myhtml_tree_t* tree, myhtml_t
             node->token->my_str_tm.length = 0;
     }
     
-    myhtml_string_char_ref_chunk_t str_chunk = {0, 0, 0, {0}, 0, encoding};
+    myhtml_string_char_ref_chunk_t str_chunk = {0, 0, 0, {0}, false, encoding};
     myhtml_encoding_result_clean(&str_chunk.res);
     
     myhtml_string_append_charef(&str_chunk, &node->token->my_str_tm, text, length);
@@ -989,6 +973,39 @@ const char * myhtml_tree_incomming_buf_make_data(myhtml_tree_t *tree, mythread_q
     }
     
     return tree->temp_tag_name.data;
+}
+
+/* queue */
+void myhtml_queue_add(myhtml_tree_t *tree, const char *html, size_t begin, mythread_queue_node_t *qnode)
+{
+#ifndef MyHTML_BUILD_WITHOUT_THREADS
+    
+    if(tree->flags & MyHTML_TREE_FLAGS_SINGLE_MODE) {
+        myhtml_parser_worker(0, tree->current_qnode);
+        while(myhtml_rules_tree_dispatcher(tree, tree->current_qnode->token)){};
+        
+        tree->current_qnode = mythread_queue_node_malloc_limit(tree->myhtml->thread, tree->queue, html, (tree->global_offset + begin), 4, NULL);
+    }
+    else {
+        tree->current_qnode = mythread_queue_node_malloc_round(tree->myhtml->thread, tree->queue_entry, html, (tree->global_offset + begin), NULL);
+    }
+
+#else
+    
+    myhtml_parser_worker(0, tree->current_qnode);
+    while(myhtml_rules_tree_dispatcher(tree, tree->current_qnode->token)){};
+    
+    tree->current_qnode = mythread_queue_node_malloc_limit(tree->myhtml->thread, tree->queue, html, (tree->global_offset + begin), 4, NULL);
+    
+#endif /* MyHTML_BUILD_WITHOUT_THREADS */
+    
+    tree->current_qnode->tree = tree;
+    tree->current_qnode->prev = qnode;
+    
+    if(qnode)
+        myhtml_tokenizer_calc_current_namespace(tree, qnode);
+    
+    myhtml_token_node_malloc(tree->token, tree->current_qnode->token, tree->token->mcasync_token_id);
 }
 
 bool myhtml_utils_strcmp(const char* ab, const char* to_lowercase, size_t size)

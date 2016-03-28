@@ -1,5 +1,6 @@
 use strict;
 use utf8;
+use Config;
 
 use FindBin;
 use ExtUtils::MakeMaker;
@@ -14,6 +15,6 @@ WriteMakefile(
     LICENSE        => 'Apache 2.0',
     LINKTYPE       => 'dynamic',
     LIBS           => ["-lpthread"],
-	CCFLAGS        => "--std=c99",
+	CCFLAGS        => " --std=c99 ". $Config{ccflags},
 	INC            => "-I$myhtml_source_dir",
 );

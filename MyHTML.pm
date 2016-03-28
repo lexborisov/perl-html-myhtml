@@ -22,7 +22,7 @@ use strict;
 use vars qw($AUTOLOAD $VERSION $ABSTRACT @ISA @EXPORT);
 
 BEGIN {
-	$VERSION = 0.27;
+	$VERSION = 0.31;
 	$ABSTRACT = "Fast HTML Parser using Threads with no outside dependencies";
 	
 	@ISA = qw(Exporter DynaLoader);

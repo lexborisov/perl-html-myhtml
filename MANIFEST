@@ -61,6 +61,8 @@ source/myhtml/utils/mcsync.h
 source/myhtml/utils/mctree.c
 source/myhtml/utils/mctree.h
 source/myhtml/utils/resources.h
+source/myhtml/utils/mcsimple.h
+source/myhtml/utils/mcsimple.c
 source/myhtml/utils.c
 source/myhtml/utils.h
 

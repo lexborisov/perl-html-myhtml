@@ -35,16 +35,9 @@ extern "C" {
 #include "myhtml/utils/mchar_async.h"
 #include "myhtml/utils/mcsync.h"
 
-// attr
-#define myhtml_token_attr(__token__, __idx__) __token__->attr[__idx__]
-#define myhtml_token_attr_get(__token__, __idx__, __patam__) myhtml_token_attr(__token__, __idx__).__patam__
-
-#define myhtml_token_attr_malloc(__token__, __attr_idx__, __thread_idx__)                  \
-    __attr_idx__ = mcobject_async_malloc(__token__->attr_obj, __thread_idx__, NULL);       \
-    myhtml_token_attr_clean(__attr_idx__)
-
-// nodes
-#define myhtml_token_node_get(__token__, __idx__, __patam__) __token__->nodes[__idx__].__patam__
+#define myhtml_token_attr_malloc(__token__, __attr_node__, __thread_idx__)                  \
+    __attr_node__ = mcobject_async_malloc(__token__->attr_obj, __thread_idx__, NULL);       \
+    myhtml_token_attr_clean(__attr_node__)
 
 #define myhtml_token_node_set_done(__token_node__) __token_node__->type |= MyHTML_TOKEN_TYPE_DONE
 
@@ -146,7 +139,7 @@ bool myhtml_token_attr_copy(myhtml_token_t* token, myhtml_token_attr_t* attr, my
 myhtml_token_attr_t * myhtml_token_attr_by_name(myhtml_token_node_t* node, const char* name, size_t name_size);
 bool myhtml_token_attr_compare(myhtml_token_node_t* target, myhtml_token_node_t* dest);
 myhtml_token_node_t * myhtml_token_merged_two_token_string(myhtml_tree_t* tree, myhtml_token_node_t* token_to, myhtml_token_node_t* token_from, bool cp_reverse);
-void myhtml_token_set_replacement_character_for_null_token(myhtml_token_node_t* node);
+void myhtml_token_set_replacement_character_for_null_token(myhtml_tree_t* tree, myhtml_token_node_t* node);
 
 void myhtml_token_print_param_by_idx(myhtml_tree_t* myhtml_tree, myhtml_token_node_t* node, FILE* out);
 void myhtml_token_print_by_idx(myhtml_tree_t* myhtml_tree, myhtml_token_node_t* node, FILE* out);
