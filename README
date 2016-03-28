@@ -19,6 +19,13 @@ Just follow the usual procedure:
    make test
    make install
 
+For Windows OS (for Strawberry Perl (http://strawberryperl.com/))
+
+   perl Makefile.PL
+   dmake
+   dmake test
+   dmake install
+ 
 
 METHODS
 
