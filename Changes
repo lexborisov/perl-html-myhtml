@@ -1,3 +1,7 @@
+0.33	Tue Mar 29 2016 13:02:03 GMT+0300
+	Removed deprecated structures
+	Fixes for build freebsd and linux
+
 0.32	Mon Mar 28 2016 23:41:03 GMT+0300
 	Fisex for OS Windows. Speed UP for OS Windows
 
