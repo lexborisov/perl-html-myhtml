@@ -16,6 +16,9 @@
  Author: lex.borisov@gmail.com (Alexander Borisov)
 */
 
+#include "EXTERN.h"
+#include "perl.h"
+
 #include "source/myhtml/charef.c"
 #include "source/myhtml/encoding.c"
 #include "source/myhtml/encoding_detect.c"
@@ -41,8 +44,6 @@
 #include "source/myhtml/utils/mcsimple.c"
 #include "source/myhtml/utils.c"
 
-#include "EXTERN.h"
-#include "perl.h"
 #include "XSUB.h"
 
 typedef myhtml_t * HTML__MyHTML;
