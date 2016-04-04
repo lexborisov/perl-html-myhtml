@@ -1,3 +1,6 @@
+0.35	Mon Apr 04 2016 22:21:03 GMT+0300
+	Fixes for build in NetBSD
+
 0.33	Tue Mar 29 2016 13:02:03 GMT+0300
 	Removed deprecated structures
 	Fixes for build freebsd and linux

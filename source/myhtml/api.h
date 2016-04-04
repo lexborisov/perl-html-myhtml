@@ -380,6 +380,10 @@ enum myhtml_status {
     MyHTML_STATUS_THREAD_ERROR_QUEUE_MALLOC            = 60,
     MyHTML_STATUS_THREAD_ERROR_QUEUE_NODES_MALLOC      = 61,
     MyHTML_STATUS_THREAD_ERROR_QUEUE_NODE_MALLOC       = 62,
+    MyHTML_STATUS_THREAD_ERROR_MUTEX_MALLOC            = 70,
+    MyHTML_STATUS_THREAD_ERROR_MUTEX_INIT              = 71,
+    MyHTML_STATUS_THREAD_ERROR_MUTEX_LOCK              = 72,
+    MyHTML_STATUS_THREAD_ERROR_MUTEX_UNLOCK            = 73,
     MyHTML_STATUS_RULES_ERROR_MEMORY_ALLOCATION        = 100,
     MyHTML_STATUS_PERF_ERROR_COMPILED_WITHOUT_PERF     = 200,
     MyHTML_STATUS_PERF_ERROR_FIND_CPU_CLOCK            = 201,
@@ -1621,6 +1625,23 @@ myhtml_encoding_detect_unicode(const char *text, size_t length, myhtml_encoding_
  */
 bool
 myhtml_encoding_detect_bom(const char *text, size_t length, myhtml_encoding_t *encoding);
+
+/**
+ * Detect Unicode character encoding by BOM. Cut BOM if will be found
+ *
+ * Now available for detect UTF-8, UTF-16LE, UTF-16BE
+ *
+ * @param[in]  text
+ * @param[in]  text length
+ * @param[out] detected encoding
+ * @param[out] new text position
+ * @param[out] new size position
+ *
+ * @return true if encoding found, otherwise false
+ */
+bool
+myhtml_encoding_detect_and_cut_bom(const char *text, size_t length, myhtml_encoding_t *encoding,
+                                   const char **new_text, size_t *new_size);
 
 /***********************************************************************************
  *
