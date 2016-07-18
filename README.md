@@ -6,13 +6,13 @@ HTML::MyHTML is a fast HTML Parser using Threads with no outside dependencies
 
 # DESCRIPTION
 
-This Parser based on [MyHTML library] (it includes version 0.6.1)
+This Parser based on [MyHTML library] (it includes version 1.0.2)
 
 - Asynchronous Parsing, Build Tree and Indexation
 - Fully conformant with the [HTML5 specification]
 - Manipulation of elements: add, change, delete and other (available in C lib, in Perl coming soon)
 - Manipulation of elements attributes: add, change, delete and other (available in C lib, in Perl coming soon)
-- Support 34 character encoding by specification [encoding.spec.whatwg.org]
+- Support 39 character encoding by specification [encoding.spec.whatwg.org]
 - Support detecting character encodings
 - Support Single Mode parsing
 - Support for fragment parsing
@@ -50,11 +50,12 @@ make install
  
  # print result
  print "Print HTML Tree:\n";
- $tree->document->print_childs($tree, *STDOUT, 0);
+ $tree->document->print_children($tree, *STDOUT, 0);
  
  print "\nGet all DIV elements of HTML Tree:\n";
  my $list = $tree->get_elements_by_tag_name("div");
- 
+ # or my $list = $tree->body()->get_nodes_by_tag_id($tree, MyHTML_TAG_DIV);
+
  foreach my $node (@$list) {
  	my $info = $node->info($tree);
  	
@@ -262,6 +263,30 @@ Destroy of a MyHTML_TREE structure
 ```
 
 Return: UNDEF if successful, otherwise an HTML::MyHTML::Tree structure
+
+
+### parse_flags_set
+
+Set Parse Flags for Tree
+
+```perl
+ $tree->parse_flags_set($parse_flags);
+```
+
+Example: 
+```perl
+$tree->parse_flags_set( MyHTML_TREE_PARSE_FLAGS_WITHOUT_BUILD_TREE|MyHTML_TREE_PARSE_FLAGS_WITHOUT_DOCTYPE_IN_TREE|MyHTML_TREE_PARSE_FLAGS_SKIP_WHITESPACE_TOKEN );
+```
+
+### parse_flags
+
+Get Parse Flags of Tree
+
+```perl
+ my $parse_flags = $tree->parse_flags();
+```
+
+Return: myhtml_tree_parse_flags_t
 
 
 ### get_myhtml
@@ -539,13 +564,112 @@ Get last child of node
 
 Return: HTML::MyHTML::Tree::Node if exists, otherwise an UNDEF value
 
+### get_nodes_by_attribute_key
+
+Get nodes by attribute key of current node
+
+```perl
+ my $nodes = $node->get_nodes_by_attribute_key($tree, $key [, $out_status]);
+```
+
+Return: HTML::MyHTML::Tree::Node ARRAY if exists, otherwise an UNDEF value
+
+
+### get_nodes_by_attribute_value
+
+Get nodes by attribute value; exactly equal; like a [foo="bar"]
+
+```perl
+ # $case_insensitive: 1 or 0
+ # $key: may bу undef for find in all keys
+ my $nodes = $node->get_nodes_by_attribute_value($tree, $case_insensitive, $key, $value [, $out_status]);
+```
+
+Return: HTML::MyHTML::Tree::Node ARRAY if exists, otherwise an UNDEF value
+
+
+### get_nodes_by_attribute_value_whitespace_separated
+
+Get nodes by attribute value; whitespace separated; like a [foo~="bar"]
+
+```perl
+ # $case_insensitive: 1 or 0
+ # $key: may bу undef for find in all keys
+ my $nodes = $node->get_nodes_by_attribute_value_whitespace_separated($tree, $case_insensitive, $key, $value [, $out_status]);
+```
+
+Return: HTML::MyHTML::Tree::Node ARRAY if exists, otherwise an UNDEF value
+
+
+### get_nodes_by_attribute_value_begin
+
+Get nodes by attribute value; value begins exactly with the string; like a [foo^="bar"]
+
+```perl
+ # $case_insensitive: 1 or 0
+ # $key: may bу undef for find in all keys
+ my $nodes = $node->get_nodes_by_attribute_value_begin($tree, $case_insensitive, $key, $value [, $out_status]);
+```
+
+Return: HTML::MyHTML::Tree::Node ARRAY if exists, otherwise an UNDEF value
+
+
+### get_nodes_by_attribute_value_end
+
+Get nodes by attribute value; value ends exactly with the string; like a [foo$="bar"]
+
+```perl
+ # $case_insensitive: 1 or 0
+ # $key: may bу undef for find in all keys
+ my $nodes = $node->get_nodes_by_attribute_value_end($tree, $case_insensitive, $key, $value [, $out_status]);
+```
+
+Return: HTML::MyHTML::Tree::Node ARRAY if exists, otherwise an UNDEF value
+
+
+### get_nodes_by_attribute_value_contain
+
+Get nodes by attribute value; value contains the substring; like a [foo*="bar"]
+
+```perl
+ # $case_insensitive: 1 or 0
+ # $key: may bу undef for find in all keys
+ my $nodes = $node->get_nodes_by_attribute_value_contain($tree, $case_insensitive, $key, $value [, $out_status]);
+```
+
+Return: HTML::MyHTML::Tree::Node ARRAY if exists, otherwise an UNDEF value
+
+
+### get_nodes_by_attribute_value_hyphen_separated
+
+Get nodes by attribute value; attribute value is a hyphen-separated list of values beginning
+
+```perl
+ # $case_insensitive: 1 or 0
+ # $key: may bу undef for find in all keys
+ my $nodes = $node->get_nodes_by_attribute_value_hyphen_separated($tree, $case_insensitive, $key, $value [, $out_status]);
+```
+
+Return: HTML::MyHTML::Tree::Node ARRAY if exists, otherwise an UNDEF value
+
+
+### get_nodes_by_tag_id
+
+Get nodes by tag id in node scope
+
+```perl
+ my $nodes = $node->get_nodes_by_tag_id($tree, $tag_id [, $out_status]);
+```
+
+Return: HTML::MyHTML::Tree::Node ARRAY if exists, otherwise an UNDEF value
+
 
 ### free
 
 Release allocated resources
 
 ```perl
- $node->free($node, $tree);
+ $node->free($tree);
 ```
 
 ### remove
@@ -553,7 +677,7 @@ Release allocated resources
 Remove node of tree
 
 ```perl
- my $node = $node->remove();
+ my $node = $node->remove($tree);
 ```
 
 Return: HTML::MyHTML::Tree::Node if successful, otherwise a UNDEF value
@@ -1045,6 +1169,16 @@ Return: 1 (true) if encoding found, otherwise 0 (false)
  MyHTML_TAG_LAST_ENTRY
 ```
 
+## Tree parse flags
+
+```text
+ MyHTML_TREE_PARSE_FLAGS_CLEAN
+ MyHTML_TREE_PARSE_FLAGS_WITHOUT_BUILD_TREE
+ MyHTML_TREE_PARSE_FLAGS_WITHOUT_PROCESS_TOKEN
+ MyHTML_TREE_PARSE_FLAGS_SKIP_WHITESPACE_TOKEN
+ MyHTML_TREE_PARSE_FLAGS_WITHOUT_DOCTYPE_IN_TREE
+```
+
 ## Namespaces
 
 ```text
@@ -1096,6 +1230,11 @@ Return: 1 (true) if encoding found, otherwise 0 (false)
  MyHTML_ENCODING_WINDOWS_1258
  MyHTML_ENCODING_WINDOWS_874
  MyHTML_ENCODING_X_MAC_CYRILLIC
+ MyHTML_ENCODING_ISO_2022_JP
+ MyHTML_ENCODING_GBK
+ MyHTML_ENCODING_SHIFT_JIS
+ MyHTML_ENCODING_EUC_JP
+ MyHTML_ENCODING_ISO_8859_8_I
  MyHTML_ENCODING_LAST_ENTRY
 ```
 
@@ -1104,6 +1243,7 @@ Return: 1 (true) if encoding found, otherwise 0 (false)
 ```text
  MyHTML_STATUS_OK
  MyHTML_STATUS_ERROR_MEMORY_ALLOCATION
+ MyHTML_STATUS_THREAD_ERROR_MEMORY_ALLOCATION
  MyHTML_STATUS_THREAD_ERROR_LIST_INIT
  MyHTML_STATUS_THREAD_ERROR_ATTR_MALLOC
  MyHTML_STATUS_THREAD_ERROR_ATTR_INIT
@@ -1120,10 +1260,15 @@ Return: 1 (true) if encoding found, otherwise 0 (false)
  MyHTML_STATUS_THREAD_ERROR_QUEUE_MALLOC
  MyHTML_STATUS_THREAD_ERROR_QUEUE_NODES_MALLOC
  MyHTML_STATUS_THREAD_ERROR_QUEUE_NODE_MALLOC
+ MyHTML_STATUS_THREAD_ERROR_MUTEX_MALLOC
+ MyHTML_STATUS_THREAD_ERROR_MUTEX_INIT
+ MyHTML_STATUS_THREAD_ERROR_MUTEX_LOCK
+ MyHTML_STATUS_THREAD_ERROR_MUTEX_UNLOCK
  MyHTML_STATUS_RULES_ERROR_MEMORY_ALLOCATION
  MyHTML_STATUS_PERF_ERROR_COMPILED_WITHOUT_PERF
  MyHTML_STATUS_PERF_ERROR_FIND_CPU_CLOCK
  MyHTML_STATUS_TOKENIZER_ERROR_MEMORY_ALLOCATION
+ MyHTML_STATUS_TOKENIZER_ERROR_FRAGMENT_INIT
  MyHTML_STATUS_TAGS_ERROR_MEMORY_ALLOCATION
  MyHTML_STATUS_TAGS_ERROR_MCOBJECT_CREATE
  MyHTML_STATUS_TAGS_ERROR_MCOBJECT_MALLOC
@@ -1134,8 +1279,18 @@ Return: 1 (true) if encoding found, otherwise 0 (false)
  MyHTML_STATUS_TREE_ERROR_MCOBJECT_CREATE
  MyHTML_STATUS_TREE_ERROR_MCOBJECT_INIT
  MyHTML_STATUS_TREE_ERROR_MCOBJECT_CREATE_NODE
+ MyHTML_STATUS_TREE_ERROR_INCOMING_BUFFER_CREATE
  MyHTML_STATUS_ATTR_ERROR_ALLOCATION
  MyHTML_STATUS_ATTR_ERROR_CREATE
+ MyHTML_STATUS_STREAM_BUFFER_ERROR_CREATE
+ MyHTML_STATUS_STREAM_BUFFER_ERROR_INIT
+ MyHTML_STATUS_STREAM_BUFFER_ENTRY_ERROR_CREATE
+ MyHTML_STATUS_STREAM_BUFFER_ENTRY_ERROR_INIT
+ MyHTML_STATUS_STREAM_BUFFER_ERROR_ADD_ENTRY
+ MyHTML_STATUS_MCOBJECT_ERROR_CACHE_CREATE
+ MyHTML_STATUS_MCOBJECT_ERROR_CHUNK_CREATE
+ MyHTML_STATUS_MCOBJECT_ERROR_CHUNK_INIT
+ MyHTML_STATUS_MCOBJECT_ERROR_CACHE_REALLOC
 ```
 
 ## Options
@@ -1145,9 +1300,6 @@ Return: 1 (true) if encoding found, otherwise 0 (false)
  MyHTML_OPTIONS_PARSE_MODE_SINGLE
  MyHTML_OPTIONS_PARSE_MODE_ALL_IN_ONE
  MyHTML_OPTIONS_PARSE_MODE_SEPARATELY
- MyHTML_OPTIONS_PARSE_MODE_WORKER_TREE
- MyHTML_OPTIONS_PARSE_MODE_WORKER_INDEX
- MyHTML_OPTIONS_PARSE_MODE_TREE_INDEX
 ```
 
 # Examples

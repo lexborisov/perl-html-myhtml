@@ -61,7 +61,7 @@ name(attr)
 	
 	CODE:
 		size_t length;
-		const char* name = myhtml_attribute_name(attr, &length);
+		const char* name = myhtml_attribute_key(attr, &length);
 		RETVAL = newSVpv(name, length);
 	OUTPUT:
 		RETVAL

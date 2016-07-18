@@ -1,24 +1,26 @@
 /*
- Copyright 2015 Alexander Borisov
+ Copyright (C) 2015-2016 Alexander Borisov
  
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
  
- http://www.apache.org/licenses/LICENSE-2.0
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ Lesser General Public License for more details.
  
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  
  Author: lex.borisov@gmail.com (Alexander Borisov)
 */
 
 #include "myhtml/utils/mcsync.h"
 
-#if !defined(MyHTML_WITHOUT_THREADS) && ((defined(__GNUC__) && __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 7)) || \
+#if !defined(MyHTML_BUILD_WITHOUT_THREADS) && ((defined(__GNUC__) && __GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 7)) || \
     defined(__ATOMIC_SEQ_CST))
 #define MyHTML_FORCE_SPINLOCK
 #endif
@@ -35,7 +37,7 @@ static void mcsync_atomic_store(int* ptr, int value)
 }
 #endif
 
-#if !defined(MyHTML_WITHOUT_THREADS) && defined(IS_OS_WINDOWS)
+#if !defined(MyHTML_BUILD_WITHOUT_THREADS) && defined(IS_OS_WINDOWS)
 static int pthread_mutex_lock(pthread_mutex_t *mutex)
 {
     EnterCriticalSection(mutex);
@@ -78,15 +80,15 @@ mcsync_t * mcsync_destroy(mcsync_t* mcsync, int destroy_self)
     if(mcsync == NULL)
         return NULL;
     
-#if !defined(MyHTML_FORCE_SPINLOCK)
+#if !defined(MyHTML_BUILD_WITHOUT_THREADS) && !defined(MyHTML_FORCE_SPINLOCK)
     if(mcsync->mutex) {
         pthread_mutex_destroy(mcsync->mutex);
-        free(mcsync->mutex);
+        myhtml_free(mcsync->mutex);
     }
 #endif
     
     if(destroy_self)
-        free(mcsync);
+        myhtml_free(mcsync);
     
     return NULL;
 }
@@ -100,7 +102,7 @@ mcsync_status_t mcsync_lock(mcsync_t* mcsync)
 {
 #if defined(MyHTML_FORCE_SPINLOCK)
     while (!mcsync_atomic_compare_exchange(&mcsync->spinlock, 0, 1)) {}
-#else
+#elif !defined(MyHTML_BUILD_WITHOUT_THREADS)
     mcsync_mutex_lock(mcsync);
 #endif
     
@@ -111,7 +113,7 @@ mcsync_status_t mcsync_unlock(mcsync_t* mcsync)
 {
 #if defined(MyHTML_FORCE_SPINLOCK)
     mcsync_atomic_store(&mcsync->spinlock, 0);
-#else
+#elif !defined(MyHTML_BUILD_WITHOUT_THREADS)
     mcsync_mutex_unlock(mcsync);
 #endif
     
@@ -120,9 +122,9 @@ mcsync_status_t mcsync_unlock(mcsync_t* mcsync)
 
 mcsync_status_t mcsync_mutex_lock(mcsync_t* mcsync)
 {
-#if !defined(MyHTML_FORCE_SPINLOCK)
+#if !defined(MyHTML_BUILD_WITHOUT_THREADS) && !defined(MyHTML_FORCE_SPINLOCK)
     if(mcsync->mutex == NULL) {
-        mcsync->mutex = (pthread_mutex_t*)malloc(sizeof(pthread_mutex_t));
+        mcsync->mutex = (pthread_mutex_t*)myhtml_malloc(sizeof(pthread_mutex_t));
         
         if(mcsync->mutex == NULL)
             return MCSYNC_STATUS_ERROR_MEM_ALLOCATE;
@@ -141,7 +143,7 @@ mcsync_status_t mcsync_mutex_lock(mcsync_t* mcsync)
 
 mcsync_status_t mcsync_mutex_unlock(mcsync_t* mcsync)
 {
-#if !defined(MyHTML_FORCE_SPINLOCK)
+#if !defined(MyHTML_BUILD_WITHOUT_THREADS) && !defined(MyHTML_FORCE_SPINLOCK)
     if(pthread_mutex_unlock(mcsync->mutex) == 0)
         return MCSYNC_STATUS_OK;
     else

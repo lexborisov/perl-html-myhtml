@@ -18,30 +18,30 @@
  Author: lex.borisov@gmail.com (Alexander Borisov)
 */
 
-#ifndef MyHTML_RULES_H
-#define MyHTML_RULES_H
+#ifndef MyHTML_CALLBACK_H
+#define MyHTML_CALLBACK_H
 #pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
+    
 #include "myhtml/myosi.h"
-#include "myhtml/myhtml.h"
 #include "myhtml/tree.h"
 
+/* callback functions */
+myhtml_callback_token_f myhtml_callback_before_token_done(myhtml_tree_t *tree);
+myhtml_callback_token_f myhtml_callback_after_token_done(myhtml_tree_t *tree);
+void myhtml_callback_before_token_done_set(myhtml_tree_t *tree, myhtml_callback_token_f func, void* ctx);
+void myhtml_callback_after_token_done_set(myhtml_tree_t *tree, myhtml_callback_token_f func, void* ctx);
 
-myhtml_status_t myhtml_rules_init(myhtml_t* myhtml);
-void myhtml_rules_stop_parsing(myhtml_tree_t* tree);
-
-bool myhtml_rules_tree_dispatcher(myhtml_tree_t* tree, myhtml_token_node_t* token);
-bool myhtml_insertion_mode_in_body_other_end_tag(myhtml_tree_t* tree, myhtml_token_node_t* token);
-bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* token);
-bool myhtml_insertion_mode_in_template(myhtml_tree_t* tree, myhtml_token_node_t* token);
-
+myhtml_callback_tree_node_f myhtml_callback_tree_node_insert(myhtml_tree_t *tree);
+myhtml_callback_tree_node_f myhtml_callback_tree_node_remove(myhtml_tree_t *tree);
+void myhtml_callback_tree_node_insert_set(myhtml_tree_t *tree, myhtml_callback_tree_node_f func, void* ctx);
+void myhtml_callback_tree_node_remove_set(myhtml_tree_t *tree, myhtml_callback_tree_node_f func, void* ctx);
 
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
 
-#endif /* myhtml_rules_h */
+#endif /* MyHTML_CALLBACK_H */

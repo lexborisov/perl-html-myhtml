@@ -19,15 +19,20 @@
 #include "EXTERN.h"
 #include "perl.h"
 
+#include "source/myhtml/callback.c"
 #include "source/myhtml/charef.c"
+#include "source/myhtml/data_process.c"
 #include "source/myhtml/encoding.c"
 #include "source/myhtml/encoding_detect.c"
+#include "source/myhtml/incoming.c"
 #include "source/myhtml/myhtml.c"
+#include "source/myhtml/mynamespace.c"
 #include "source/myhtml/myosi.c"
 #include "source/myhtml/mystring.c"
 #include "source/myhtml/parser.c"
 #include "source/myhtml/perf.c"
 #include "source/myhtml/rules.c"
+#include "source/myhtml/stream.c"
 #include "source/myhtml/tag.c"
 #include "source/myhtml/tag_init.c"
 #include "source/myhtml/thread.c"
@@ -38,10 +43,11 @@
 #include "source/myhtml/tokenizer_script.c"
 #include "source/myhtml/tree.c"
 #include "source/myhtml/utils/mchar_async.c"
+#include "source/myhtml/utils/mcobject.c"
 #include "source/myhtml/utils/mcobject_async.c"
+#include "source/myhtml/utils/mcsimple.c"
 #include "source/myhtml/utils/mcsync.c"
 #include "source/myhtml/utils/mctree.c"
-#include "source/myhtml/utils/mcsimple.c"
 #include "source/myhtml/utils.c"
 
 #include "XSUB.h"
@@ -56,12 +62,15 @@ typedef myhtml_tag_index_node_t * HTML__MyHTML__Tag__Index__Node;
 typedef myhtml_collection_t * HTML__MyHTML__Collection;
 typedef myhtml_string_t * HTML__MyHTML__String;
 
+typedef myhtml_collection_t* (*myhtml_perl_get_attr_by_val_f)(myhtml_tree_t *tree, myhtml_collection_t* collection, myhtml_tree_node_t* node, bool case_insensitive,
+                                    const char* key, size_t key_len, const char* value, size_t value_len, myhtml_status_t* status);
+
 HV * sm_get_attr_info(myhtml_tree_attr_t* attr)
 {
 	HV* hash = newHV();
 	
 	size_t name_len, value_len;
-	const char* attr_name = myhtml_attribute_name(attr, &name_len);
+	const char* attr_name = myhtml_attribute_key(attr, &name_len);
 	const char* attr_value = myhtml_attribute_value(attr, &value_len);
 	
 	hv_store(hash, "key", 3, newSVpv(attr_name, name_len), 0);
@@ -106,7 +115,7 @@ HV * sm_get_node_attr_info(myhtml_tree_node_t* node)
     while(attr)
     {
 		size_t name_len, value_len;
-		const char* attr_name = myhtml_attribute_name(attr, &name_len);
+		const char* attr_name = myhtml_attribute_key(attr, &name_len);
 		const char* attr_value = myhtml_attribute_value(attr, &value_len);
 		
 		if(value_len) {
@@ -194,12 +203,56 @@ AV * sm_get_elements_by_tag_id(myhtml_tree_t *tree, myhtml_tag_id_t tag_id)
 	return array_list;
 }
 
+AV * sm_get_elements_by_collections(myhtml_collection_t* collection)
+{
+	AV* array_list = newAV();
+	
+	for(size_t i = 0; i < collection->length; i++) {
+		SV* node = newSV(0);
+		sv_setref_pv(node, "HTML::MyHTML::Tree::Node", collection->list[i]);
+		
+		av_push(array_list, node);
+	}
+	
+	return array_list;
+}
+
 void sm_set_out_status(SV* out_status, myhtml_status_t status)
 {
 	if(SvOK(out_status)) {
 		sv_setiv(out_status, status);
 	}
 }
+
+SV* sm_get_nodes_by_attribute_value(myhtml_tree_node_t* node, myhtml_tree_t* tree, SV* case_insensitive, SV* key, SV* value, SV* out_status, myhtml_perl_get_attr_by_val_f func_get)
+{
+	STRLEN key_len;
+	STRLEN value_len;
+	
+	const char *char_key = NULL;
+	const char *char_value = NULL;
+	
+	if(SvOK(key)) {
+		char_key = SvPV(key, key_len);
+	}
+	
+	if(SvOK(value)) {
+		char_value = SvPV(value, value_len);
+	}
+	
+	myhtml_status_t status;
+	myhtml_collection_t *collection = func_get(tree, NULL, node, SvIV(case_insensitive),
+								char_key, key_len, char_value, value_len, &status);
+	
+	sm_set_out_status(out_status, status);
+	
+	if(status == MyHTML_STATUS_OK) {
+		return newRV_noinc((SV *)sm_get_elements_by_collections(collection));
+	}
+	
+	return &PL_sv_undef;
+}
+
 
 //####
 //#
@@ -609,7 +662,7 @@ tree_print_node_childs(tree, node, fh, inc)
 	size_t inc;
 	
 	CODE:
-		myhtml_tree_print_node_childs(tree, node, fh, inc);
+		myhtml_tree_print_node_children(tree, node, fh, inc);
 
 void
 tree_print_node(tree, node, fh)
@@ -742,11 +795,12 @@ MODULE = HTML::MyHTML::Tree::Node  PACKAGE = HTML::MyHTML::Tree::Node
 PROTOTYPES: DISABLE
 
 HTML::MyHTML::Tree::Node
-node_remove(node)
+node_remove(tree, node)
+	HTML::MyHTML::Tree tree;
 	HTML::MyHTML::Tree::Node node;
 	
 	CODE:
-		RETVAL = myhtml_node_remove(node);
+		RETVAL = myhtml_node_remove(tree, node);
 	OUTPUT:
 		RETVAL
 
@@ -787,7 +841,7 @@ node_insert_append_child(tree, target, node)
 	HTML::MyHTML::Tree::Node node;
 	
 	CODE:
-		RETVAL = myhtml_node_insert_append_child(tree, target, node);
+		RETVAL = myhtml_node_append_child(tree, target, node);
 	OUTPUT:
 		RETVAL
 
@@ -971,7 +1025,7 @@ attribute_name(attr)
 	
 	CODE:
 		size_t length;
-		const char* name = myhtml_attribute_name(attr, &length);
+		const char* name = myhtml_attribute_key(attr, &length);
 		RETVAL = newSVpv(name, length);
 	OUTPUT:
 		RETVAL
@@ -1245,12 +1299,13 @@ collection_destroy(collection)
 		RETVAL
 
 myhtml_status_t
-collection_check_size(collection, up_to_length)
+collection_check_size(collection, need, up_to_length)
 	HTML::MyHTML::Collection collection;
+	SV* need;
 	SV* up_to_length;
 	
 	CODE:
-		RETVAL = myhtml_collection_check_size(collection, SvIV(up_to_length));
+		RETVAL = myhtml_collection_check_size(collection, SvIV(need), SvIV(up_to_length));
 	OUTPUT:
 		RETVAL
 
@@ -1426,6 +1481,48 @@ PROTOTYPES: DISABLE
 
 #************************************************************************************
 #
+# MyHTML_PARSE_FLAGS constants
+#
+#************************************************************************************
+
+SV*
+MyHTML_TREE_PARSE_FLAGS_CLEAN()
+	CODE:
+		RETVAL = newSViv( MyHTML_TREE_PARSE_FLAGS_CLEAN );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_TREE_PARSE_FLAGS_WITHOUT_BUILD_TREE()
+	CODE:
+		RETVAL = newSViv( MyHTML_TREE_PARSE_FLAGS_WITHOUT_BUILD_TREE );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_TREE_PARSE_FLAGS_WITHOUT_PROCESS_TOKEN()
+	CODE:
+		RETVAL = newSViv( MyHTML_TREE_PARSE_FLAGS_WITHOUT_PROCESS_TOKEN );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_TREE_PARSE_FLAGS_SKIP_WHITESPACE_TOKEN()
+	CODE:
+		RETVAL = newSViv( MyHTML_TREE_PARSE_FLAGS_SKIP_WHITESPACE_TOKEN );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_TREE_PARSE_FLAGS_WITHOUT_DOCTYPE_IN_TREE()
+	CODE:
+		RETVAL = newSViv( MyHTML_TREE_PARSE_FLAGS_WITHOUT_DOCTYPE_IN_TREE );
+	OUTPUT:
+		RETVAL
+
+
+#************************************************************************************
+#
 # MyHTML_STATUS constants
 #
 #************************************************************************************
@@ -1441,6 +1538,13 @@ SV*
 MyHTML_STATUS_ERROR_MEMORY_ALLOCATION()
 	CODE:
 		RETVAL = newSViv( MyHTML_STATUS_ERROR_MEMORY_ALLOCATION );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_STATUS_THREAD_ERROR_MEMORY_ALLOCATION()
+	CODE:
+		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_MEMORY_ALLOCATION );
 	OUTPUT:
 		RETVAL
 
@@ -1557,6 +1661,34 @@ MyHTML_STATUS_THREAD_ERROR_QUEUE_NODE_MALLOC()
 		RETVAL
 
 SV*
+MyHTML_STATUS_THREAD_ERROR_MUTEX_MALLOC()
+	CODE:
+		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_MUTEX_MALLOC );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_STATUS_THREAD_ERROR_MUTEX_INIT()
+	CODE:
+		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_MUTEX_INIT );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_STATUS_THREAD_ERROR_MUTEX_LOCK()
+	CODE:
+		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_MUTEX_LOCK );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_STATUS_THREAD_ERROR_MUTEX_UNLOCK()
+	CODE:
+		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_MUTEX_UNLOCK );
+	OUTPUT:
+		RETVAL
+
+SV*
 MyHTML_STATUS_RULES_ERROR_MEMORY_ALLOCATION()
 	CODE:
 		RETVAL = newSViv( MyHTML_STATUS_RULES_ERROR_MEMORY_ALLOCATION );
@@ -1581,6 +1713,13 @@ SV*
 MyHTML_STATUS_TOKENIZER_ERROR_MEMORY_ALLOCATION()
 	CODE:
 		RETVAL = newSViv( MyHTML_STATUS_TOKENIZER_ERROR_MEMORY_ALLOCATION );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_STATUS_TOKENIZER_ERROR_FRAGMENT_INIT()
+	CODE:
+		RETVAL = newSViv( MyHTML_STATUS_TOKENIZER_ERROR_FRAGMENT_INIT );
 	OUTPUT:
 		RETVAL
 
@@ -1655,6 +1794,13 @@ MyHTML_STATUS_TREE_ERROR_MCOBJECT_CREATE_NODE()
 		RETVAL
 
 SV*
+MyHTML_STATUS_TREE_ERROR_INCOMING_BUFFER_CREATE()
+	CODE:
+		RETVAL = newSViv( MyHTML_STATUS_TREE_ERROR_INCOMING_BUFFER_CREATE );
+	OUTPUT:
+		RETVAL
+
+SV*
 MyHTML_STATUS_ATTR_ERROR_ALLOCATION()
 	CODE:
 		RETVAL = newSViv( MyHTML_STATUS_ATTR_ERROR_ALLOCATION );
@@ -1667,6 +1813,70 @@ MyHTML_STATUS_ATTR_ERROR_CREATE()
 		RETVAL = newSViv( MyHTML_STATUS_ATTR_ERROR_CREATE );
 	OUTPUT:
 		RETVAL
+
+SV*
+MyHTML_STATUS_STREAM_BUFFER_ERROR_CREATE()
+	CODE:
+		RETVAL = newSViv( MyHTML_STATUS_STREAM_BUFFER_ERROR_CREATE );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_STATUS_STREAM_BUFFER_ERROR_INIT()
+	CODE:
+		RETVAL = newSViv( MyHTML_STATUS_STREAM_BUFFER_ERROR_INIT );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_STATUS_STREAM_BUFFER_ENTRY_ERROR_CREATE()
+	CODE:
+		RETVAL = newSViv( MyHTML_STATUS_STREAM_BUFFER_ENTRY_ERROR_CREATE );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_STATUS_STREAM_BUFFER_ENTRY_ERROR_INIT()
+	CODE:
+		RETVAL = newSViv( MyHTML_STATUS_STREAM_BUFFER_ENTRY_ERROR_INIT );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_STATUS_STREAM_BUFFER_ERROR_ADD_ENTRY()
+	CODE:
+		RETVAL = newSViv( MyHTML_STATUS_STREAM_BUFFER_ERROR_ADD_ENTRY );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_STATUS_MCOBJECT_ERROR_CACHE_CREATE()
+	CODE:
+		RETVAL = newSViv( MyHTML_STATUS_MCOBJECT_ERROR_CACHE_CREATE );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_STATUS_MCOBJECT_ERROR_CHUNK_CREATE()
+	CODE:
+		RETVAL = newSViv( MyHTML_STATUS_MCOBJECT_ERROR_CHUNK_CREATE );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_STATUS_MCOBJECT_ERROR_CHUNK_INIT()
+	CODE:
+		RETVAL = newSViv( MyHTML_STATUS_MCOBJECT_ERROR_CHUNK_INIT );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_STATUS_MCOBJECT_ERROR_CACHE_REALLOC()
+	CODE:
+		RETVAL = newSViv( MyHTML_STATUS_MCOBJECT_ERROR_CACHE_REALLOC );
+	OUTPUT:
+		RETVAL
+
 
 #************************************************************************************
 #
@@ -1702,26 +1912,6 @@ MyHTML_OPTIONS_PARSE_MODE_SEPARATELY()
 	OUTPUT:
 		RETVAL
 
-SV*
-MyHTML_OPTIONS_PARSE_MODE_WORKER_TREE()
-	CODE:
-		RETVAL = newSViv( MyHTML_OPTIONS_PARSE_MODE_WORKER_TREE );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_OPTIONS_PARSE_MODE_WORKER_INDEX()
-	CODE:
-		RETVAL = newSViv( MyHTML_OPTIONS_PARSE_MODE_WORKER_INDEX );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_OPTIONS_PARSE_MODE_TREE_INDEX()
-	CODE:
-		RETVAL = newSViv( MyHTML_OPTIONS_PARSE_MODE_TREE_INDEX );
-	OUTPUT:
-		RETVAL
 
 #************************************************************************************
 #
@@ -3816,6 +4006,41 @@ SV*
 MyHTML_ENCODING_X_MAC_CYRILLIC()
 	CODE:
 		RETVAL = newSViv( MyHTML_ENCODING_X_MAC_CYRILLIC );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_ENCODING_ISO_2022_JP()
+	CODE:
+		RETVAL = newSViv( MyHTML_ENCODING_ISO_2022_JP );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_ENCODING_GBK()
+	CODE:
+		RETVAL = newSViv( MyHTML_ENCODING_GBK );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_ENCODING_SHIFT_JIS()
+	CODE:
+		RETVAL = newSViv( MyHTML_ENCODING_SHIFT_JIS );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_ENCODING_EUC_JP()
+	CODE:
+		RETVAL = newSViv( MyHTML_ENCODING_EUC_JP );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_ENCODING_ISO_8859_8_I()
+	CODE:
+		RETVAL = newSViv( MyHTML_ENCODING_ISO_8859_8_I );
 	OUTPUT:
 		RETVAL
 

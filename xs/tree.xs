@@ -34,6 +34,27 @@ init(tree, myhtml)
 #=sort 2
 
 void
+parse_flags_set(tree, parse_flags)
+	HTML::MyHTML::Tree tree;
+	myhtml_tree_parse_flags_t parse_flags;
+	
+	CODE:
+		myhtml_tree_parse_flags_set(tree, parse_flags);
+
+#=sort 2
+
+myhtml_tree_parse_flags_t
+parse_flags(tree)
+	HTML::MyHTML::Tree tree;
+	
+	CODE:
+		RETVAL = myhtml_tree_parse_flags(tree);
+	OUTPUT:
+		RETVAL
+
+#=sort 2
+
+void
 clean(tree)
 	HTML::MyHTML::Tree tree;
 	

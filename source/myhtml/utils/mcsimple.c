@@ -1,16 +1,28 @@
-//
-//  mcsimple.c
-//  osx
-//
-//  Created by Alexander Borisov on 23.03.16.
-//  Copyright © 2016 Alexander Borisov. All rights reserved.
-//
+/*
+ Copyright (C) 2015-2016 Alexander Borisov
+ 
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
+ 
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ Lesser General Public License for more details.
+ 
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ 
+ Author: lex.borisov@gmail.com (Alexander Borisov)
+ */
 
-#include "mcsimple.h"
+#include "myhtml/utils/mcsimple.h"
 
 mcsimple_t * mcsimple_create(void)
 {
-    return mycalloc(1, sizeof(mcsimple_t));
+    return myhtml_calloc(1, sizeof(mcsimple_t));
 }
 
 void mcsimple_init(mcsimple_t *mcsimple, size_t pos_size, size_t list_size, size_t struct_size)
@@ -20,7 +32,7 @@ void mcsimple_init(mcsimple_t *mcsimple, size_t pos_size, size_t list_size, size
     mcsimple->list_pos_length_used = 0;
     mcsimple->list_pos_length = 0;
     mcsimple->list_pos_size = pos_size;
-    mcsimple->list = (uint8_t**)mycalloc(pos_size, sizeof(uint8_t*));
+    mcsimple->list = (uint8_t**)myhtml_calloc(pos_size, sizeof(uint8_t*));
     
     if(mcsimple->list == NULL) {
         return;
@@ -66,7 +78,7 @@ uint8_t * mcsimple_init_list_entries(mcsimple_t *mcsimple, size_t pos)
     if(mcsimple->list_pos_length >= mcsimple->list_pos_size)
     {
         size_t new_size = mcsimple->list_pos_size + 128;
-        uint8_t **list = (uint8_t**)myrealloc(mcsimple->list, mcsimple->list_pos_size * sizeof(uint8_t*));
+        uint8_t **list = (uint8_t**)myhtml_realloc(mcsimple->list, mcsimple->list_pos_size * sizeof(uint8_t*));
         
         if(list) {
             mcsimple->list = list;
@@ -82,7 +94,7 @@ uint8_t * mcsimple_init_list_entries(mcsimple_t *mcsimple, size_t pos)
     
     if(mcsimple->list[pos] == NULL) {
         mcsimple->list_pos_length_used++;
-        mcsimple->list[pos] = (uint8_t*)mymalloc(mcsimple->list_size * sizeof(uint8_t));
+        mcsimple->list[pos] = (uint8_t*)myhtml_malloc(mcsimple->list_size * sizeof(uint8_t));
     }
     
     return mcsimple->list[pos];

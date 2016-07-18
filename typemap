@@ -19,6 +19,8 @@ myhtml_tag_id_t T_IV
 enum myhtml_options T_IV
 enum myhtml_namespace T_IV
 
+myhtml_tree_parse_flags_t T_IV
+
 HTML::MyHTML T_PTROBJ
 HTML::MyHTML::Tree T_PTROBJ
 HTML::MyHTML::Tree::Node T_PTROBJ

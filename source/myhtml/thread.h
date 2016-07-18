@@ -1,17 +1,19 @@
 /*
- Copyright 2015 Alexander Borisov
+ Copyright (C) 2015-2016 Alexander Borisov
  
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
  
- http://www.apache.org/licenses/LICENSE-2.0
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ Lesser General Public License for more details.
  
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  
  Author: lex.borisov@gmail.com (Alexander Borisov)
 */
@@ -145,11 +147,6 @@ struct mythread_queue_node {
     mythread_queue_node_t *prev;
     myhtml_token_node_t *token;
     myhtml_tree_t *tree;
-    
-    size_t begin;
-    size_t length;
-    
-    const char* text;
 };
 
 struct mythread_queue_thread_param {
@@ -192,18 +189,18 @@ size_t mythread_queue_count_used_node(mythread_queue_t* queue);
 mythread_queue_node_t * mythread_queue_get_first_node(mythread_queue_t* queue);
 mythread_queue_node_t * mythread_queue_get_prev_node(mythread_queue_node_t* qnode);
 mythread_queue_node_t * mythread_queue_get_current_node(mythread_queue_t* queue);
-mythread_queue_node_t * mythread_queue_node_malloc(mythread_t *mythread, mythread_queue_t* queue, const char* text, size_t begin, myhtml_status_t *status);
-mythread_queue_node_t * mythread_queue_node_malloc_limit(mythread_t *mythread, mythread_queue_t* queue, const char* text, size_t begin, size_t limit, myhtml_status_t *status);
+mythread_queue_node_t * mythread_queue_node_malloc(mythread_t *mythread, mythread_queue_t* queue, myhtml_status_t *status);
+mythread_queue_node_t * mythread_queue_node_malloc_limit(mythread_t *mythread, mythread_queue_t* queue, size_t limit, myhtml_status_t *status);
 
 #ifndef MyHTML_BUILD_WITHOUT_THREADS
 
-mythread_queue_list_t * mythread_queue_list_create(mythread_t *mythread, size_t size, myhtml_status_t *status);
+mythread_queue_list_t * mythread_queue_list_create(mythread_t *mythread, myhtml_status_t *status);
 mythread_queue_list_entry_t * mythread_queue_list_entry_push(mythread_t *mythread, mythread_queue_t *queue, myhtml_status_t *status);
 mythread_queue_list_entry_t * mythread_queue_list_entry_delete(mythread_t *mythread, mythread_queue_list_entry_t *entry, bool destroy_queue);
 void mythread_queue_list_entry_clean(mythread_t *mythread, mythread_queue_list_entry_t *entry);
 void mythread_queue_list_entry_wait_for_done(mythread_t *mythread, mythread_queue_list_entry_t *entry);
     
-mythread_queue_node_t * mythread_queue_node_malloc_round(mythread_t *mythread, mythread_queue_list_entry_t *entry, const char* text, size_t begin, myhtml_status_t *status);
+mythread_queue_node_t * mythread_queue_node_malloc_round(mythread_t *mythread, mythread_queue_list_entry_t *entry, myhtml_status_t *status);
 
 #endif /* MyHTML_BUILD_WITHOUT_THREADS */
 

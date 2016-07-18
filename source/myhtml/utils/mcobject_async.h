@@ -1,17 +1,19 @@
 /*
- Copyright 2015-2016 Alexander Borisov
+ Copyright (C) 2015-2016 Alexander Borisov
  
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
  
- http://www.apache.org/licenses/LICENSE-2.0
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ Lesser General Public License for more details.
  
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  
  Author: lex.borisov@gmail.com (Alexander Borisov)
 */
@@ -32,12 +34,14 @@ enum mcobject_async_status {
     MCOBJECT_ASYNC_STATUS_ERROR_MEMORY_ALLOCATION             = 1,
     MCOBJECT_ASYNC_STATUS_CHUNK_ERROR_MEMORY_ALLOCATION       = 2,
     MCOBJECT_ASYNC_STATUS_CHUNK_CACHE_ERROR_MEMORY_ALLOCATION = 3,
-    MCOBJECT_ASYNC_STATUS_NODES_ERROR_MEMORY_ALLOCATION       = 4
+    MCOBJECT_ASYNC_STATUS_NODES_ERROR_MEMORY_ALLOCATION       = 4,
+    MCOBJECT_ASYNC_STATUS_NODES_ERROR_BAD_NODE_ID             = 5,
+    MCOBJECT_ASYNC_STATUS_CACHE_ERROR_MEMORY_REALLOC          = 6
 }
 typedef mcobject_async_status_t;
 
 struct mcobject_async_chunk {
-    char  *begin;
+    unsigned char *begin;
     size_t length;
     size_t size;
     
@@ -49,7 +53,7 @@ typedef mcobject_async_chunk_t;
 struct mcobject_async_node {
     mcobject_async_chunk_t *chunk;
     
-    char  **cache;
+    void  **cache;
     size_t  cache_size;
     size_t  cache_length;
 }
@@ -94,7 +98,7 @@ void mcobject_async_node_all_clean(mcobject_async_t *mcobj_async);
 void mcobject_async_node_delete(mcobject_async_t *mcobj_async, size_t node_idx);
 
 void * mcobject_async_malloc(mcobject_async_t *mcobj_async, size_t node_idx, mcobject_async_status_t *status);
-void mcobject_async_free(mcobject_async_t *mcobj_async, void *entry);
+mcobject_async_status_t mcobject_async_free(mcobject_async_t *mcobj_async, void *entry);
 
 mcobject_async_chunk_t * mcobject_async_chunk_malloc(mcobject_async_t *mcobj_async, size_t length, mcobject_async_status_t *status);
 mcobject_async_chunk_t * mcobject_async_chunk_malloc_without_lock(mcobject_async_t *mcobj_async, size_t length, mcobject_async_status_t *status);

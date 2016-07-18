@@ -18,8 +18,8 @@
  Author: lex.borisov@gmail.com (Alexander Borisov)
 */
 
-#ifndef MyHTML_RULES_H
-#define MyHTML_RULES_H
+#ifndef MyHTML_UTILS_MCOBJECT_H
+#define MyHTML_UTILS_MCOBJECT_H
 #pragma once
 
 #ifdef __cplusplus
@@ -27,21 +27,44 @@ extern "C" {
 #endif
 
 #include "myhtml/myosi.h"
-#include "myhtml/myhtml.h"
-#include "myhtml/tree.h"
+
+struct mcobject_chunk {
+    unsigned char *begin;
+    size_t length;
+    size_t size;
+    
+    struct mcobject_chunk *next;
+    struct mcobject_chunk *prev;
+}
+typedef mcobject_chunk_t;
+
+struct mcobject {
+    mcobject_chunk_t *chunk;
+    
+    void  **cache;
+    size_t  cache_size;
+    size_t  cache_length;
+    
+    size_t struct_size;
+    size_t chunk_size;
+}
+typedef mcobject_t;
 
 
-myhtml_status_t myhtml_rules_init(myhtml_t* myhtml);
-void myhtml_rules_stop_parsing(myhtml_tree_t* tree);
+mcobject_t * mcobject_create(void);
+myhtml_status_t mcobject_init(mcobject_t *mcobject, size_t chunk_size, size_t struct_size);
+void mcobject_clean(mcobject_t *mcobject);
+mcobject_t * mcobject_destroy(mcobject_t *mcobject, bool destroy_self);
 
-bool myhtml_rules_tree_dispatcher(myhtml_tree_t* tree, myhtml_token_node_t* token);
-bool myhtml_insertion_mode_in_body_other_end_tag(myhtml_tree_t* tree, myhtml_token_node_t* token);
-bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* token);
-bool myhtml_insertion_mode_in_template(myhtml_tree_t* tree, myhtml_token_node_t* token);
+void mcobject_chunk_malloc(mcobject_t* mcobject, myhtml_status_t* status);
+
+void * mcobject_malloc(mcobject_t *mcobject, myhtml_status_t* status);
+myhtml_status_t mcobject_free(mcobject_t *mcobject, void *entry);
 
 
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
 
-#endif /* myhtml_rules_h */
+#endif /* MyHTML_UTILS_MCOBJECT_H */
+

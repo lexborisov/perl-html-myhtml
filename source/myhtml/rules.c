@@ -1,17 +1,19 @@
 /*
- Copyright 2015 Alexander Borisov
+ Copyright (C) 2015-2016 Alexander Borisov
  
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
  
- http://www.apache.org/licenses/LICENSE-2.0
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ Lesser General Public License for more details.
  
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  
  Author: lex.borisov@gmail.com (Alexander Borisov)
 */
@@ -21,16 +23,13 @@
 void myhtml_insertion_fix_emit_for_text_begin_ws(myhtml_token_node_t* token)
 {
     myhtml_token_node_wait_for_done(token);
-    myhtml_string_crop_whitespace_from_begin(&token->my_str_tm);
-    
-    if(token->length != token->my_str_tm.length)
-        token->length = token->my_str_tm.length;
+    myhtml_string_crop_whitespace_from_begin(&token->str);
 }
 
 myhtml_token_node_t * myhtml_insertion_fix_split_for_text_begin_ws(myhtml_tree_t* tree, myhtml_token_node_t* token)
 {
     myhtml_token_node_wait_for_done(token);
-    size_t len = myhtml_string_whitespace_from_begin(&token->my_str_tm);
+    size_t len = myhtml_string_whitespace_from_begin(&token->str);
     
     if(len == 0)
         return NULL;
@@ -44,25 +43,24 @@ myhtml_token_node_t * myhtml_insertion_fix_split_for_text_begin_ws(myhtml_tree_t
     
     myhtml_token_node_clean(new_token);
     
-    myhtml_string_init(tree->mchar, tree->mchar_node_id, &new_token->my_str_tm, (len + 2));
+    myhtml_string_init(tree->mchar, tree->mchar_node_id, &new_token->str, (len + 2));
     
-    myhtml_string_append(&new_token->my_str_tm, token->my_str_tm.data, len);
-    new_token->length = len;
+    myhtml_string_append(&new_token->str, token->str.data, len);
+    
+    new_token->type |= MyHTML_TOKEN_TYPE_DONE;
     
     // and cut ws for original
-    token->my_str_tm.data = mchar_async_crop_first_chars_without_cache(token->my_str_tm.data, len);
-    token->my_str_tm.length -= len;
-    token->length = token->my_str_tm.length;
+    token->str.data    = mchar_async_crop_first_chars_without_cache(token->str.data, len);
+    token->str.length -= len;
     
     return new_token;
 }
 
-//
 void myhtml_insertion_fix_for_null_char_drop_all(myhtml_tree_t* tree, myhtml_token_node_t* token)
 {
     myhtml_token_node_wait_for_done(token);
     
-    myhtml_string_t *str = &token->my_str_tm;
+    myhtml_string_t *str = &token->str;
     size_t len = str->length;
     size_t offset = 0;
     
@@ -85,13 +83,11 @@ void myhtml_insertion_fix_for_null_char_drop_all(myhtml_tree_t* tree, myhtml_tok
             offset++;
         }
     }
-    
-    token->length = str->length;
 }
 
 bool myhtml_insertion_mode_initial(myhtml_tree_t* tree, myhtml_token_node_t* token)
 {
-    switch (token->tag_ctx_idx)
+    switch (token->tag_id)
     {
         case MyHTML_TAG__TEXT:
         {
@@ -118,7 +114,9 @@ bool myhtml_insertion_mode_initial(myhtml_tree_t* tree, myhtml_token_node_t* tok
             myhtml_token_node_wait_for_done(token);
             
             myhtml_token_release_and_check_doctype_attributes(tree->token, token, &tree->doctype);
-            myhtml_tree_node_insert_doctype(tree, token);
+            
+            if((tree->parse_flags & MyHTML_TREE_PARSE_FLAGS_WITHOUT_DOCTYPE_IN_TREE) == 0)
+                myhtml_tree_node_insert_doctype(tree, token);
             
             // fix for tokenizer
             if(tree->doctype.is_html == false &&
@@ -145,7 +143,7 @@ bool myhtml_insertion_mode_before_html(myhtml_tree_t* tree, myhtml_token_node_t*
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_BR:
             case MyHTML_TAG_HTML:
             case MyHTML_TAG_HEAD:
@@ -161,7 +159,7 @@ bool myhtml_insertion_mode_before_html(myhtml_tree_t* tree, myhtml_token_node_t*
         }
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG__DOCTYPE:
                 break;
@@ -209,7 +207,7 @@ bool myhtml_insertion_mode_before_head(myhtml_tree_t* tree, myhtml_token_node_t*
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_BR:
             case MyHTML_TAG_HTML:
             case MyHTML_TAG_HEAD:
@@ -225,7 +223,7 @@ bool myhtml_insertion_mode_before_head(myhtml_tree_t* tree, myhtml_token_node_t*
         }
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG__TEXT:
             {
@@ -278,7 +276,7 @@ bool myhtml_insertion_mode_in_head(myhtml_tree_t* tree, myhtml_token_node_t* tok
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_HEAD:
             {
                 myhtml_tree_open_elements_pop(tree);
@@ -315,7 +313,7 @@ bool myhtml_insertion_mode_in_head(myhtml_tree_t* tree, myhtml_token_node_t* tok
         }
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG__TEXT:
             {
@@ -417,9 +415,9 @@ bool myhtml_insertion_mode_in_head(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 // state 2
                 myhtml_tree_node_t* node = myhtml_tree_node_create(tree);
                 
-                node->tag_idx      = MyHTML_TAG_SCRIPT;
+                node->tag_id      = MyHTML_TAG_SCRIPT;
                 node->token        = token;
-                node->my_namespace = MyHTML_NAMESPACE_HTML;
+                node->ns = MyHTML_NAMESPACE_HTML;
                 node->flags        = MyHTML_TREE_NODE_PARSER_INSERTED|MyHTML_TREE_NODE_BLOCKING;
                 
                 myhtml_tree_node_insert_by_mode(tree, adjusted_location, node, insert_mode);
@@ -465,7 +463,7 @@ bool myhtml_insertion_mode_in_head_noscript(myhtml_tree_t* tree, myhtml_token_no
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_NOSCRIPT:
             {
                 myhtml_tree_open_elements_pop(tree);
@@ -485,7 +483,7 @@ bool myhtml_insertion_mode_in_head_noscript(myhtml_tree_t* tree, myhtml_token_no
         }
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG__DOCTYPE:
                 break;
@@ -535,7 +533,7 @@ bool myhtml_insertion_mode_after_head(myhtml_tree_t* tree, myhtml_token_node_t* 
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_BR:
             case MyHTML_TAG_HTML:
             case MyHTML_TAG_BODY:
@@ -555,7 +553,7 @@ bool myhtml_insertion_mode_after_head(myhtml_tree_t* tree, myhtml_token_node_t* 
         }
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG__TEXT:
             {
@@ -642,16 +640,15 @@ bool myhtml_insertion_mode_in_body_other_end_tag(myhtml_tree_t* tree, myhtml_tok
         myhtml_tree_node_t* node = tree->open_elements->list[i];
         
         // step 2
-        while (node->tag_idx == token->tag_ctx_idx && node->my_namespace == MyHTML_NAMESPACE_HTML)
-        {
-            myhtml_tree_generate_implied_end_tags(tree, token->tag_ctx_idx, MyHTML_NAMESPACE_HTML);
+        if(node->tag_id == token->tag_id && node->ns == MyHTML_NAMESPACE_HTML) {
+            myhtml_tree_generate_implied_end_tags(tree, token->tag_id, MyHTML_NAMESPACE_HTML);
             myhtml_tree_open_elements_pop_until_by_node(tree, node, false);
             
             return false;
         }
         
-        const myhtml_tag_context_t *tag_ctx = myhtml_tag_get_by_id(tree->tags, node->tag_idx);
-        if(tag_ctx->cats[ node->my_namespace ] & MyHTML_TAG_CATEGORIES_SPECIAL) {
+        const myhtml_tag_context_t *tag_ctx = myhtml_tag_get_by_id(tree->tags, node->tag_id);
+        if(tag_ctx->cats[ node->ns ] & MyHTML_TAG_CATEGORIES_SPECIAL) {
             break;
         }
     }
@@ -663,7 +660,7 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_TEMPLATE:
             {
                 return myhtml_insertion_mode_in_head(tree, token);
@@ -677,10 +674,11 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                     break;
                 
                 for (size_t i = 0; i < tree->open_elements->length; i++) {
-                    switch (tree->open_elements->list[i]->tag_idx) {
+                    switch (tree->open_elements->list[i]->tag_id) {
                         case MyHTML_TAG_DD:
                         case MyHTML_TAG_DT:
                         case MyHTML_TAG_LI:
+                        case MyHTML_TAG_MENUITEM:
                         case MyHTML_TAG_OPTGROUP:
                         case MyHTML_TAG_OPTION:
                         case MyHTML_TAG_P:
@@ -716,10 +714,11 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                     break;
                 
                 for (size_t i = 0; i < tree->open_elements->length; i++) {
-                    switch (tree->open_elements->list[i]->tag_idx) {
+                    switch (tree->open_elements->list[i]->tag_id) {
                         case MyHTML_TAG_DD:
                         case MyHTML_TAG_DT:
                         case MyHTML_TAG_LI:
+                        case MyHTML_TAG_MENUITEM:
                         case MyHTML_TAG_OPTGROUP:
                         case MyHTML_TAG_OPTION:
                         case MyHTML_TAG_P:
@@ -774,7 +773,7 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
             case MyHTML_TAG_SUMMARY:
             case MyHTML_TAG_UL:
             {
-                if(myhtml_tree_element_in_scope(tree, token->tag_ctx_idx, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE) == NULL)
+                if(myhtml_tree_element_in_scope(tree, token->tag_id, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE) == NULL)
                     break;
                 
                 // step 1
@@ -782,11 +781,11 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 
                 // step 2
                 //myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
-                //if(current_node->my_namespace != MyHTML_NAMESPACE_HTML)
+                //if(current_node->ns != MyHTML_NAMESPACE_HTML)
                 //    parse error
                 
                 // step 3
-                myhtml_tree_open_elements_pop_until(tree, token->tag_ctx_idx, MyHTML_NAMESPACE_HTML, false);
+                myhtml_tree_open_elements_pop_until(tree, token->tag_id, MyHTML_NAMESPACE_HTML, false);
                 break;
             }
                 
@@ -865,7 +864,7 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 
                 // step 2
                 //myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
-                //if(current_node->tag_idx != MyHTML_TAG_LI)
+                //if(current_node->tag_id != MyHTML_TAG_LI)
                 //    // parse error
                 
                 // step 3
@@ -877,21 +876,21 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
             case MyHTML_TAG_DT:
             case MyHTML_TAG_DD:
             {
-                if(myhtml_tree_element_in_scope(tree, token->tag_ctx_idx, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE) == NULL) {
+                if(myhtml_tree_element_in_scope(tree, token->tag_id, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE) == NULL) {
                     // parse error
                     break;
                 }
                 
                 // step 1
-                myhtml_tree_generate_implied_end_tags(tree, token->tag_ctx_idx, MyHTML_NAMESPACE_HTML);
+                myhtml_tree_generate_implied_end_tags(tree, token->tag_id, MyHTML_NAMESPACE_HTML);
                 
                 // step 2
                 //myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
-                //if(current_node->tag_idx != token->tag_ctx_idx)
+                //if(current_node->tag_id != token->tag_id)
                 //    // parse error
                 
                 // step 3
-                myhtml_tree_open_elements_pop_until(tree, token->tag_ctx_idx, MyHTML_NAMESPACE_HTML, false);
+                myhtml_tree_open_elements_pop_until(tree, token->tag_id, MyHTML_NAMESPACE_HTML, false);
                 
                 break;
             }
@@ -910,20 +909,19 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 while(i) {
                     i--;
                     
-                    const myhtml_tag_context_t *tag_ctx = myhtml_tag_get_by_id(tree->tags, list[i]->tag_idx);
+                    const myhtml_tag_context_t *tag_ctx = myhtml_tag_get_by_id(tree->tags, list[i]->tag_id);
                     
-                    if((list[i]->tag_idx == MyHTML_TAG_H1 ||
-                       list[i]->tag_idx == MyHTML_TAG_H2  ||
-                       list[i]->tag_idx == MyHTML_TAG_H3  ||
-                       list[i]->tag_idx == MyHTML_TAG_H4  ||
-                       list[i]->tag_idx == MyHTML_TAG_H5  ||
-                       list[i]->tag_idx == MyHTML_TAG_H6) &&
-                       list[i]->my_namespace == MyHTML_NAMESPACE_HTML) {
+                    if((list[i]->tag_id == MyHTML_TAG_H1 ||
+                       list[i]->tag_id == MyHTML_TAG_H2  ||
+                       list[i]->tag_id == MyHTML_TAG_H3  ||
+                       list[i]->tag_id == MyHTML_TAG_H4  ||
+                       list[i]->tag_id == MyHTML_TAG_H5  ||
+                       list[i]->tag_id == MyHTML_TAG_H6) &&
+                       list[i]->ns == MyHTML_NAMESPACE_HTML) {
                         node = list[i];
                         break;
                     }
-                    // TODO: This is wrong!!!
-                    else if(tag_ctx->cats[list[i]->my_namespace] & MyHTML_TAG_CATEGORIES_SCOPE)
+                    else if(tag_ctx->cats[list[i]->ns] & MyHTML_TAG_CATEGORIES_SCOPE)
                         break;
                 }
                 
@@ -937,20 +935,20 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 
                 // step 2
                 //myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
-                //if(current_node->tag_idx != token->tag_ctx_idx)
+                //if(current_node->tag_id != token->tag_id)
                 //    // parse error
                 
                 // step 3
                 while(tree->open_elements->length) {
                     tree->open_elements->length--;
                     
-                    if((list[tree->open_elements->length]->tag_idx == MyHTML_TAG_H1 ||
-                       list[tree->open_elements->length]->tag_idx == MyHTML_TAG_H2 ||
-                       list[tree->open_elements->length]->tag_idx == MyHTML_TAG_H3 ||
-                       list[tree->open_elements->length]->tag_idx == MyHTML_TAG_H4 ||
-                       list[tree->open_elements->length]->tag_idx == MyHTML_TAG_H5 ||
-                       list[tree->open_elements->length]->tag_idx == MyHTML_TAG_H6) &&
-                       list[tree->open_elements->length]->my_namespace == MyHTML_NAMESPACE_HTML)
+                    if((list[tree->open_elements->length]->tag_id == MyHTML_TAG_H1 ||
+                       list[tree->open_elements->length]->tag_id == MyHTML_TAG_H2 ||
+                       list[tree->open_elements->length]->tag_id == MyHTML_TAG_H3 ||
+                       list[tree->open_elements->length]->tag_id == MyHTML_TAG_H4 ||
+                       list[tree->open_elements->length]->tag_id == MyHTML_TAG_H5 ||
+                       list[tree->open_elements->length]->tag_id == MyHTML_TAG_H6) &&
+                       list[tree->open_elements->length]->ns == MyHTML_NAMESPACE_HTML)
                     {
                         break;
                     }
@@ -974,7 +972,7 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
             case MyHTML_TAG_TT:
             case MyHTML_TAG_U:
             {
-                myhtml_tree_adoption_agency_algorithm(tree, token->tag_ctx_idx);
+                myhtml_tree_adoption_agency_algorithm(tree, token->tag_id);
                     //myhtml_insertion_mode_in_body_other_end_tag(tree, token);
                 
                 break;
@@ -984,7 +982,7 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
             case MyHTML_TAG_MARQUEE:
             case MyHTML_TAG_OBJECT:
             {
-                if(myhtml_tree_element_in_scope(tree, token->tag_ctx_idx, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE) == NULL) {
+                if(myhtml_tree_element_in_scope(tree, token->tag_id, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE) == NULL) {
                     // parse error
                     break;
                 }
@@ -994,11 +992,11 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 
                 // step 2
                 //myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
-                //if(current_node->tag_idx != token->tag_ctx_idx)
+                //if(current_node->tag_id != token->tag_id)
                 //    // parse error
                 
                 // step 3
-                myhtml_tree_open_elements_pop_until(tree, token->tag_ctx_idx, MyHTML_NAMESPACE_HTML, false);
+                myhtml_tree_open_elements_pop_until(tree, token->tag_id, MyHTML_NAMESPACE_HTML, false);
                 
                 // step 4
                 myhtml_tree_active_formatting_up_to_last_marker(tree);
@@ -1008,7 +1006,6 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 
             case MyHTML_TAG_BR:
             {
-                // TODO: return char element to node
                 if(token->attr_first) {
                     token->attr_first = NULL;
                 }
@@ -1035,14 +1032,14 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
     }
     // open elements
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG__TEXT:
             {
                 if(token->type & MyHTML_TOKEN_TYPE_NULL) {
                     myhtml_insertion_fix_for_null_char_drop_all(tree, token);
                     
-                    if(token->my_str_tm.length) {
+                    if(token->str.length) {
                         myhtml_tree_active_formatting_reconstruction(tree);
                         myhtml_tree_node_insert_text(tree, token);
                         
@@ -1107,8 +1104,8 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
             {
                 if(tree->open_elements->length > 1)
                 {
-                    if(!(tree->open_elements->list[1]->tag_idx == MyHTML_TAG_BODY &&
-                         tree->open_elements->list[1]->my_namespace == MyHTML_NAMESPACE_HTML) ||
+                    if(!(tree->open_elements->list[1]->tag_id == MyHTML_TAG_BODY &&
+                         tree->open_elements->list[1]->ns == MyHTML_NAMESPACE_HTML) ||
                        myhtml_tree_open_elements_find_by_tag_idx(tree, MyHTML_TAG_TEMPLATE, MyHTML_NAMESPACE_HTML, NULL))
                         break;
                 }
@@ -1137,8 +1134,8 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
             {
                 if(tree->open_elements->length > 1)
                 {
-                    if(!(tree->open_elements->list[1]->tag_idx == MyHTML_TAG_BODY &&
-                         tree->open_elements->list[1]->my_namespace == MyHTML_NAMESPACE_HTML))
+                    if(!(tree->open_elements->list[1]->tag_id == MyHTML_TAG_BODY &&
+                         tree->open_elements->list[1]->ns == MyHTML_NAMESPACE_HTML))
                         break;
                 }
                 else
@@ -1149,7 +1146,7 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 
                 myhtml_tree_node_t* node = tree->open_elements->list[1];
                 
-                myhtml_tree_node_remove(node);
+                myhtml_tree_node_remove(tree, node);
                 myhtml_tree_open_elements_pop_until(tree, MyHTML_TAG_HTML, MyHTML_NAMESPACE_HTML, true);
                 
                 myhtml_tree_node_insert_html_element(tree, token);
@@ -1165,16 +1162,16 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 
                 myhtml_tree_node_t** list = tree->open_elements->list;
                 for(size_t i = 0; i < tree->open_elements->length; i++) {
-                    if(list[i]->tag_idx != MyHTML_TAG_DD     && list[i]->tag_idx != MyHTML_TAG_DT       &&
-                       list[i]->tag_idx != MyHTML_TAG_LI     && list[i]->tag_idx != MyHTML_TAG_OPTGROUP &&
-                       list[i]->tag_idx != MyHTML_TAG_OPTION && list[i]->tag_idx != MyHTML_TAG_P        &&
-                       list[i]->tag_idx != MyHTML_TAG_RB     && list[i]->tag_idx != MyHTML_TAG_RP       &&
-                       list[i]->tag_idx != MyHTML_TAG_RT     && list[i]->tag_idx != MyHTML_TAG_RTC      &&
-                       list[i]->tag_idx != MyHTML_TAG_TBODY  && list[i]->tag_idx != MyHTML_TAG_TD       &&
-                       list[i]->tag_idx != MyHTML_TAG_TFOOT  && list[i]->tag_idx != MyHTML_TAG_TH       &&
-                       list[i]->tag_idx != MyHTML_TAG_THEAD  && list[i]->tag_idx != MyHTML_TAG_TR       &&
-                       list[i]->tag_idx != MyHTML_TAG_BODY   && list[i]->tag_idx != MyHTML_TAG_HTML     &&
-                       list[i]->my_namespace != MyHTML_NAMESPACE_HTML)
+                    if(list[i]->tag_id != MyHTML_TAG_DD       && list[i]->tag_id != MyHTML_TAG_DT       &&
+                       list[i]->tag_id != MyHTML_TAG_LI       && list[i]->tag_id != MyHTML_TAG_MENUITEM &&
+                       list[i]->tag_id != MyHTML_TAG_OPTGROUP && list[i]->tag_id != MyHTML_TAG_OPTION   &&
+                       list[i]->tag_id != MyHTML_TAG_P        && list[i]->tag_id != MyHTML_TAG_RB       &&
+                       list[i]->tag_id != MyHTML_TAG_RP       && list[i]->tag_id != MyHTML_TAG_RT       &&
+                       list[i]->tag_id != MyHTML_TAG_RTC      && list[i]->tag_id != MyHTML_TAG_TBODY    &&
+                       list[i]->tag_id != MyHTML_TAG_TD       && list[i]->tag_id != MyHTML_TAG_TFOOT    &&
+                       list[i]->tag_id != MyHTML_TAG_TH       && list[i]->tag_id != MyHTML_TAG_THEAD    &&
+                       list[i]->tag_id != MyHTML_TAG_TR       && list[i]->tag_id != MyHTML_TAG_BODY     &&
+                       list[i]->tag_id != MyHTML_TAG_HTML     && list[i]->ns != MyHTML_NAMESPACE_HTML)
                     {
                         // parse error
                     }
@@ -1201,7 +1198,6 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
             case MyHTML_TAG_HEADER:
             case MyHTML_TAG_HGROUP:
             case MyHTML_TAG_MAIN:
-            case MyHTML_TAG_MENU:
             case MyHTML_TAG_NAV:
             case MyHTML_TAG_OL:
             case MyHTML_TAG_P:
@@ -1212,6 +1208,21 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 if(myhtml_tree_element_in_scope(tree, MyHTML_TAG_P, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE_BUTTON)) {
                     myhtml_tree_tags_close_p(tree);
                 }
+                
+                myhtml_tree_node_insert_html_element(tree, token);
+                break;
+            }
+                
+            case MyHTML_TAG_MENU:
+            {
+                if(myhtml_tree_element_in_scope(tree, MyHTML_TAG_P, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE_BUTTON)) {
+                    myhtml_tree_tags_close_p(tree);
+                }
+                
+                myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
+                
+                if(myhtml_is_html_node(current_node, MyHTML_TAG_MENUITEM))
+                    myhtml_tree_open_elements_pop(tree);
                 
                 myhtml_tree_node_insert_html_element(tree, token);
                 break;
@@ -1230,7 +1241,7 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 
                 myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
                 
-                switch (current_node->tag_idx) {
+                switch (current_node->tag_id) {
                     case MyHTML_TAG_H1:
                         case MyHTML_TAG_H2:
                         case MyHTML_TAG_H3:
@@ -1238,7 +1249,7 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                         case MyHTML_TAG_H5:
                         case MyHTML_TAG_H6:
                         
-                        if(current_node->my_namespace == MyHTML_NAMESPACE_HTML)
+                        if(current_node->ns == MyHTML_NAMESPACE_HTML)
                             myhtml_tree_open_elements_pop(tree);
                         
                         break;
@@ -1297,17 +1308,17 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                     oel_index--;
                     
                     myhtml_tree_node_t* node = tree->open_elements->list[oel_index];
-                    const myhtml_tag_context_t *tag_ctx = myhtml_tag_get_by_id(tree->tags, node->tag_idx);
+                    const myhtml_tag_context_t *tag_ctx = myhtml_tag_get_by_id(tree->tags, node->tag_id);
                     
                     if(myhtml_is_html_node(node, MyHTML_TAG_LI)) {
                         myhtml_tree_generate_implied_end_tags(tree, MyHTML_TAG_LI, MyHTML_NAMESPACE_HTML);
                         myhtml_tree_open_elements_pop_until(tree, MyHTML_TAG_LI, MyHTML_NAMESPACE_HTML, false);
                         break;
                     }
-                    else if(tag_ctx->cats[node->my_namespace] & MyHTML_TAG_CATEGORIES_SPECIAL)
+                    else if(tag_ctx->cats[node->ns] & MyHTML_TAG_CATEGORIES_SPECIAL)
                     {
-                        if(!((node->tag_idx == MyHTML_TAG_ADDRESS || node->tag_idx == MyHTML_TAG_DIV ||
-                             node->tag_idx == MyHTML_TAG_P) && node->my_namespace == MyHTML_NAMESPACE_HTML))
+                        if(!((node->tag_id == MyHTML_TAG_ADDRESS || node->tag_id == MyHTML_TAG_DIV ||
+                             node->tag_id == MyHTML_TAG_P) && node->ns == MyHTML_NAMESPACE_HTML))
                                 break;
                     }
                 }
@@ -1332,7 +1343,7 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                     oel_index--;
                     
                     myhtml_tree_node_t* node = tree->open_elements->list[oel_index];
-                    const myhtml_tag_context_t *tag_ctx = myhtml_tag_get_by_id(tree->tags, node->tag_idx);
+                    const myhtml_tag_context_t *tag_ctx = myhtml_tag_get_by_id(tree->tags, node->tag_id);
                     
                     if(myhtml_is_html_node(node, MyHTML_TAG_DD)) {
                         myhtml_tree_generate_implied_end_tags(tree, MyHTML_TAG_DD, MyHTML_NAMESPACE_HTML);
@@ -1344,10 +1355,10 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                         myhtml_tree_open_elements_pop_until(tree, MyHTML_TAG_DT, MyHTML_NAMESPACE_HTML, false);
                         break;
                     }
-                    else if(tag_ctx->cats[node->my_namespace] & MyHTML_TAG_CATEGORIES_SPECIAL)
+                    else if(tag_ctx->cats[node->ns] & MyHTML_TAG_CATEGORIES_SPECIAL)
                     {
-                        if(!((node->tag_idx == MyHTML_TAG_ADDRESS || node->tag_idx == MyHTML_TAG_DIV ||
-                             node->tag_idx == MyHTML_TAG_P) && node->my_namespace == MyHTML_NAMESPACE_HTML))
+                        if(!((node->tag_id == MyHTML_TAG_ADDRESS || node->tag_id == MyHTML_TAG_DIV ||
+                             node->tag_id == MyHTML_TAG_P) && node->ns == MyHTML_NAMESPACE_HTML))
                                 break;
                     }
                 }
@@ -1500,7 +1511,6 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 break;
             }
                 
-            case MyHTML_TAG_MENUITEM:
             case MyHTML_TAG_PARAM:
             case MyHTML_TAG_SOURCE:
             case MyHTML_TAG_TRACK:
@@ -1516,6 +1526,11 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                     myhtml_tree_tags_close_p(tree);
                 }
                 
+                myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
+                
+                if(myhtml_is_html_node(current_node, MyHTML_TAG_MENUITEM))
+                    myhtml_tree_open_elements_pop(tree);
+                
                 myhtml_tree_node_insert_html_element(tree, token);
                 myhtml_tree_open_elements_pop(tree);
                 
@@ -1525,119 +1540,8 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 
             case MyHTML_TAG_IMAGE:
             {
-                token->tag_ctx_idx = MyHTML_TAG_IMG;
+                token->tag_id = MyHTML_TAG_IMG;
                 return true;
-            }
-                
-            case MyHTML_TAG_ISINDEX:
-            {
-                myhtml_tree_node_t* is_in_node = myhtml_tree_open_elements_find_by_tag_idx(tree, MyHTML_TAG_TEMPLATE, MyHTML_NAMESPACE_HTML, NULL);
-                if(tree->node_form && is_in_node == NULL)
-                    break;
-                
-                tree->flags ^= (tree->flags & MyHTML_TREE_FLAGS_FRAMESET_OK);
-                
-                if(myhtml_tree_element_in_scope(tree, MyHTML_TAG_P, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE_BUTTON)) {
-                    myhtml_tree_tags_close_p(tree);
-                }
-                
-                myhtml_tree_node_t* form = myhtml_tree_node_insert(tree, MyHTML_TAG_FORM, MyHTML_NAMESPACE_HTML);
-                myhtml_tree_node_t* template = myhtml_tree_open_elements_find_by_tag_idx(tree, MyHTML_TAG_TEMPLATE, MyHTML_NAMESPACE_HTML, NULL);
-                
-                if(template == NULL)
-                    tree->node_form = form;
-                
-                myhtml_token_node_wait_for_done(token);
-                myhtml_token_attr_t *attr_action = myhtml_token_attr_remove_by_name(token, "action", 6);
-                
-                if(attr_action) {
-                    myhtml_token_node_malloc(tree->token, form->token, tree->mcasync_token_id);
-                    myhtml_token_node_set_done(form->token);
-                    
-                    myhtml_token_attr_copy(tree->token, attr_action, form->token, tree->mcasync_attr_id);
-                }
-                
-                myhtml_tree_node_insert(tree, MyHTML_TAG_HR, MyHTML_NAMESPACE_HTML);
-                myhtml_tree_open_elements_pop(tree);
-                
-                myhtml_tree_active_formatting_reconstruction(tree);
-                
-                myhtml_tree_node_insert(tree, MyHTML_TAG_LABEL, MyHTML_NAMESPACE_HTML);
-                
-                // Insert characters (see below for what they should say).
-                // Prompt: If the token has an attribute with the name "prompt",
-                // then the first stream of characters must be the same string as given in that attribute,
-                // and the second stream of characters must be empty. Otherwise,
-                // the two streams of character tokens together should, together with the input element,
-                // express the equivalent of "This is a searchable index. Enter search keywords: (input field)" in the user's preferred language.
-                
-                myhtml_token_attr_t *attr_prompt = myhtml_token_attr_remove_by_name(token, "prompt", 6);
-                //myhtml_token_attr_t *attr_name   =
-                myhtml_token_attr_remove_by_name(token, "name", 4);
-                
-                myhtml_tree_node_t* text_node = myhtml_tree_node_insert(tree, MyHTML_TAG__TEXT, MyHTML_NAMESPACE_HTML);
-                myhtml_tree_open_elements_pop(tree);
-                
-                myhtml_token_node_malloc(tree->token, text_node->token, tree->mcasync_token_id);
-                myhtml_token_node_set_done(text_node->token);
-                
-                const char message[] = "This is a searchable index. Enter search keywords: ";
-                
-                if(attr_prompt && attr_prompt->value_length) {
-                    myhtml_token_node_text_append(tree->token, text_node->token, &attr_prompt->entry.data[ attr_prompt->value_begin ], attr_prompt->value_length);
-                }
-                else {
-                    myhtml_token_node_text_append(tree->token, text_node->token, message, strlen(message));
-                }
-                
-                // Insert an HTML element for an "input" start tag token
-                // with all the attributes from the "isindex" token except "name", "action", and "prompt",
-                // and with an attribute named "name" with the value "isindex".
-                // (This creates an input element with the name attribute set to the magic value "isindex".)
-                // Immediately pop the current node off the stack of open elements.
-                myhtml_tree_node_t* input_node = myhtml_tree_node_insert(tree, MyHTML_TAG_INPUT, MyHTML_NAMESPACE_HTML);
-                
-                myhtml_token_node_malloc(tree->token, input_node->token, tree->mcasync_token_id);
-                myhtml_token_node_set_done(input_node->token);
-                
-                if(token->attr_first) {
-                    myhtml_token_attr_t* attr_isindex = token->attr_first;
-                    
-                    while (attr_isindex)
-                    {
-                        myhtml_token_attr_copy(tree->token, attr_isindex, input_node->token, tree->mcasync_attr_id);
-                        attr_isindex = attr_isindex->next;
-                    }
-                }
-                myhtml_token_node_attr_append(tree->token, input_node->token, "name", 4, "isindex", 7, tree->mcasync_attr_id);
-                myhtml_tree_open_elements_pop(tree);
-                
-                // Insert more characters (see below for what they should say).
-//                text_node = myhtml_tree_node_insert(tree, MyHTML_TAG__TEXT, MyHTML_NAMESPACE_HTML);
-//                myhtml_tree_open_elements_pop(tree);
-//                
-//                myhtml_token_node_malloc(tree->token, text_node->token, tree->mcasync_token_id);
-//                myhtml_token_node_set_done(text_node->token);
-//                
-//                if(attr_prompt && attr_prompt->value_length) {
-//                    myhtml_token_node_text_append(tree->token, text_node->token, &attr_prompt->entry.data[ attr_prompt->value_begin ], attr_prompt->value_length);
-//                }
-//                else {
-//                    myhtml_token_node_text_append(tree->token, text_node->token, message, strlen(message));
-//                }
-                
-                // and the end
-                myhtml_tree_open_elements_pop(tree);
-                
-                myhtml_tree_node_insert(tree, MyHTML_TAG_HR, MyHTML_NAMESPACE_HTML);
-                myhtml_tree_open_elements_pop(tree);
-                
-                myhtml_tree_open_elements_pop(tree);
-                
-                if(template == NULL)
-                    tree->node_form = NULL;
-                
-                break;
             }
                 
             case MyHTML_TAG_TEXTAREA:
@@ -1743,6 +1647,17 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 break;
             }
                 
+            case MyHTML_TAG_MENUITEM:
+            {
+                myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
+                
+                if(myhtml_is_html_node(current_node, MyHTML_TAG_MENUITEM))
+                    myhtml_tree_open_elements_pop(tree);
+                
+                myhtml_tree_node_insert_html_element(tree, token);
+                break;
+            }
+                
             case MyHTML_TAG_RB:
             case MyHTML_TAG_RTC:
             {
@@ -1751,7 +1666,7 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 }
                 
                 // myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
-                // if(current_node->tag_idx != MyHTML_TAG_RUBY) PARSE_ERROR
+                // if(current_node->tag_id != MyHTML_TAG_RUBY) PARSE_ERROR
                 
                 myhtml_tree_node_insert_html_element(tree, token);
                 break;
@@ -1765,8 +1680,8 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 }
                 
                 // myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
-                // if(current_node->tag_idx != MyHTML_TAG_RTC ||
-                //    current_node->tag_idx != MyHTML_TAG_RUBY) PARSE_ERROR
+                // if(current_node->tag_id != MyHTML_TAG_RTC ||
+                //    current_node->tag_id != MyHTML_TAG_RUBY) PARSE_ERROR
                 
                 myhtml_tree_node_insert_html_element(tree, token);
                 break;
@@ -1782,7 +1697,7 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 myhtml_token_adjust_foreign_attributes(token);
                 
                 myhtml_tree_node_t* current_node = myhtml_tree_node_insert_foreign_element(tree, token);
-                current_node->my_namespace = MyHTML_NAMESPACE_MATHML;
+                current_node->ns = MyHTML_NAMESPACE_MATHML;
                 
                 if(token->type & MyHTML_TOKEN_TYPE_CLOSE_SELF)
                     myhtml_tree_open_elements_pop(tree);
@@ -1800,7 +1715,7 @@ bool myhtml_insertion_mode_in_body(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 myhtml_token_adjust_foreign_attributes(token);
                 
                 myhtml_tree_node_t* current_node = myhtml_tree_node_insert_foreign_element(tree, token);
-                current_node->my_namespace = MyHTML_NAMESPACE_SVG;
+                current_node->ns = MyHTML_NAMESPACE_SVG;
                 
                 if(token->type & MyHTML_TOKEN_TYPE_CLOSE_SELF)
                     myhtml_tree_open_elements_pop(tree);
@@ -1841,7 +1756,7 @@ bool myhtml_insertion_mode_text(myhtml_tree_t* tree, myhtml_token_node_t* token)
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_SCRIPT:
             {
                 // new document.write is not works; set back
@@ -1859,11 +1774,11 @@ bool myhtml_insertion_mode_text(myhtml_tree_t* tree, myhtml_token_node_t* token)
         }
     }
     else {
-        if(token->tag_ctx_idx == MyHTML_TAG__END_OF_FILE)
+        if(token->tag_id == MyHTML_TAG__END_OF_FILE)
         {
             myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
             
-            if(current_node->tag_idx == MyHTML_TAG_SCRIPT)
+            if(current_node->tag_id == MyHTML_TAG_SCRIPT)
                 current_node->flags |= MyHTML_TREE_FLAGS_ALREADY_STARTED;
             
             myhtml_tree_open_elements_pop(tree);
@@ -1882,7 +1797,7 @@ bool myhtml_insertion_mode_in_table(myhtml_tree_t* tree, myhtml_token_node_t* to
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_TABLE:
             {
                 myhtml_tree_node_t* table_node = myhtml_tree_element_in_scope(tree, MyHTML_TAG_TABLE, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE_TABLE);
@@ -1929,18 +1844,18 @@ bool myhtml_insertion_mode_in_table(myhtml_tree_t* tree, myhtml_token_node_t* to
         }
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG__TEXT:
             {
                 myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
                 
-                if((current_node->tag_idx == MyHTML_TAG_TABLE  ||
-                   current_node->tag_idx  == MyHTML_TAG_TBODY  ||
-                   current_node->tag_idx  == MyHTML_TAG_TFOOT  ||
-                   current_node->tag_idx  == MyHTML_TAG_THEAD  ||
-                   current_node->tag_idx  == MyHTML_TAG_TR)    &&
-                   current_node->my_namespace == MyHTML_NAMESPACE_HTML)
+                if((current_node->tag_id == MyHTML_TAG_TABLE  ||
+                   current_node->tag_id  == MyHTML_TAG_TBODY  ||
+                   current_node->tag_id  == MyHTML_TAG_TFOOT  ||
+                   current_node->tag_id  == MyHTML_TAG_THEAD  ||
+                   current_node->tag_id  == MyHTML_TAG_TR)    &&
+                   current_node->ns == MyHTML_NAMESPACE_HTML)
                 {
                     myhtml_tree_token_list_clean(tree->token_list);
                     
@@ -2092,12 +2007,12 @@ bool myhtml_insertion_mode_in_table(myhtml_tree_t* tree, myhtml_token_node_t* to
 bool myhtml_insertion_mode_in_table_text(myhtml_tree_t* tree, myhtml_token_node_t* token)
 {
     // skip NULL, we replaced earlier
-    if(token->tag_ctx_idx == MyHTML_TAG__TEXT)
+    if(token->tag_id == MyHTML_TAG__TEXT)
     {
         if(token->type & MyHTML_TOKEN_TYPE_NULL) {
             myhtml_insertion_fix_for_null_char_drop_all(tree, token);
             
-            if(token->my_str_tm.length)
+            if(token->str.length)
                 myhtml_tree_token_list_append(tree->token_list, token);
         }
         else
@@ -2139,7 +2054,7 @@ bool myhtml_insertion_mode_in_caption(myhtml_tree_t* tree, myhtml_token_node_t* 
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_CAPTION:
             {
                 if(myhtml_tree_element_in_scope(tree, MyHTML_TAG_CAPTION, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE_TABLE) == NULL) {
@@ -2150,7 +2065,7 @@ bool myhtml_insertion_mode_in_caption(myhtml_tree_t* tree, myhtml_token_node_t* 
                 myhtml_tree_generate_implied_end_tags(tree, 0, MyHTML_NAMESPACE_UNDEF);
                 
                 //myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
-                //if(current_node->tag_idx != MyHTML_TAG_CAPTION) {
+                //if(current_node->tag_id != MyHTML_TAG_CAPTION) {
                 //    // parse error
                 //}
                 
@@ -2171,7 +2086,7 @@ bool myhtml_insertion_mode_in_caption(myhtml_tree_t* tree, myhtml_token_node_t* 
                 myhtml_tree_generate_implied_end_tags(tree, 0, MyHTML_NAMESPACE_UNDEF);
                 
                 //myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
-                //if(current_node->tag_idx != MyHTML_TAG_CAPTION) {
+                //if(current_node->tag_id != MyHTML_TAG_CAPTION) {
                 //    // parse error
                 //}
                 
@@ -2201,7 +2116,7 @@ bool myhtml_insertion_mode_in_caption(myhtml_tree_t* tree, myhtml_token_node_t* 
         }
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG_CAPTION:
             case MyHTML_TAG_COL:
@@ -2221,7 +2136,7 @@ bool myhtml_insertion_mode_in_caption(myhtml_tree_t* tree, myhtml_token_node_t* 
                 myhtml_tree_generate_implied_end_tags(tree, 0, MyHTML_NAMESPACE_UNDEF);
                 
                 //myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
-                //if(current_node->tag_idx != MyHTML_TAG_CAPTION) {
+                //if(current_node->tag_id != MyHTML_TAG_CAPTION) {
                 //    // parse error
                 //}
                 
@@ -2244,13 +2159,13 @@ bool myhtml_insertion_mode_in_column_group(myhtml_tree_t* tree, myhtml_token_nod
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_COLGROUP:
             {
                 myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
                 
-                if(current_node == NULL || !(current_node->tag_idx == MyHTML_TAG_COLGROUP &&
-                   current_node->my_namespace == MyHTML_NAMESPACE_HTML))
+                if(current_node == NULL || !(current_node->tag_id == MyHTML_TAG_COLGROUP &&
+                   current_node->ns == MyHTML_NAMESPACE_HTML))
                 {
                     break;
                 }
@@ -2274,8 +2189,8 @@ bool myhtml_insertion_mode_in_column_group(myhtml_tree_t* tree, myhtml_token_nod
             default: {
                 myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
                 
-                if(current_node && current_node->tag_idx == MyHTML_TAG_COLGROUP &&
-                   current_node->my_namespace == MyHTML_NAMESPACE_HTML)
+                if(current_node && current_node->tag_id == MyHTML_TAG_COLGROUP &&
+                   current_node->ns == MyHTML_NAMESPACE_HTML)
                 {
                     myhtml_tree_open_elements_pop(tree);
                     
@@ -2288,7 +2203,7 @@ bool myhtml_insertion_mode_in_column_group(myhtml_tree_t* tree, myhtml_token_nod
         }
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG__TEXT:
             {
@@ -2303,7 +2218,7 @@ bool myhtml_insertion_mode_in_column_group(myhtml_tree_t* tree, myhtml_token_nod
                 
                 myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
                 
-                if(current_node && current_node->tag_idx == MyHTML_TAG_COLGROUP)
+                if(current_node && current_node->tag_id == MyHTML_TAG_COLGROUP)
                 {
                     myhtml_tree_open_elements_pop(tree);
                     
@@ -2348,8 +2263,8 @@ bool myhtml_insertion_mode_in_column_group(myhtml_tree_t* tree, myhtml_token_nod
             {
                 myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
                 
-                if(current_node && current_node->tag_idx == MyHTML_TAG_COLGROUP &&
-                   current_node->my_namespace == MyHTML_NAMESPACE_HTML)
+                if(current_node && current_node->tag_id == MyHTML_TAG_COLGROUP &&
+                   current_node->ns == MyHTML_NAMESPACE_HTML)
                 {
                     myhtml_tree_open_elements_pop(tree);
                     
@@ -2370,12 +2285,12 @@ bool myhtml_insertion_mode_in_table_body(myhtml_tree_t* tree, myhtml_token_node_
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_TBODY:
             case MyHTML_TAG_TFOOT:
             case MyHTML_TAG_THEAD:
             {
-                myhtml_tree_node_t* node = myhtml_tree_element_in_scope(tree, token->tag_ctx_idx, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE_TABLE);
+                myhtml_tree_node_t* node = myhtml_tree_element_in_scope(tree, token->tag_id, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE_TABLE);
                 
                 if(node == NULL)
                     // parse error
@@ -2423,7 +2338,7 @@ bool myhtml_insertion_mode_in_table_body(myhtml_tree_t* tree, myhtml_token_node_
         }
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG_TR:
             {
@@ -2481,7 +2396,7 @@ bool myhtml_insertion_mode_in_row(myhtml_tree_t* tree, myhtml_token_node_t* toke
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_TR:
             {
                 myhtml_tree_node_t* tr_node = myhtml_tree_element_in_scope(tree, MyHTML_TAG_TR, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE_TABLE);
@@ -2517,7 +2432,7 @@ bool myhtml_insertion_mode_in_row(myhtml_tree_t* tree, myhtml_token_node_t* toke
             case MyHTML_TAG_TFOOT:
             case MyHTML_TAG_THEAD:
             {
-                myhtml_tree_node_t* node = myhtml_tree_element_in_scope(tree, token->tag_ctx_idx, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE_TABLE);
+                myhtml_tree_node_t* node = myhtml_tree_element_in_scope(tree, token->tag_id, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE_TABLE);
                 if(node == NULL)
                     // parse error
                     break;
@@ -2538,7 +2453,7 @@ bool myhtml_insertion_mode_in_row(myhtml_tree_t* tree, myhtml_token_node_t* toke
         }
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG_TH:
             case MyHTML_TAG_TD:
@@ -2584,11 +2499,11 @@ bool myhtml_insertion_mode_in_cell(myhtml_tree_t* tree, myhtml_token_node_t* tok
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_TD:
             case MyHTML_TAG_TH:
             {
-                myhtml_tree_node_t* node = myhtml_tree_element_in_scope(tree, token->tag_ctx_idx, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE_TABLE);
+                myhtml_tree_node_t* node = myhtml_tree_element_in_scope(tree, token->tag_id, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE_TABLE);
                 
                 if(node == NULL)
                     // parse error
@@ -2598,13 +2513,13 @@ bool myhtml_insertion_mode_in_cell(myhtml_tree_t* tree, myhtml_token_node_t* tok
                 
                 myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
                 
-                if(!(current_node->my_namespace = MyHTML_NAMESPACE_HTML &&
-                   current_node->tag_idx == token->tag_ctx_idx))
+                if(!(current_node->ns = MyHTML_NAMESPACE_HTML &&
+                   current_node->tag_id == token->tag_id))
                 {
                     // parse error
                 }
                 
-                myhtml_tree_open_elements_pop_until(tree, token->tag_ctx_idx, MyHTML_NAMESPACE_HTML, false);
+                myhtml_tree_open_elements_pop_until(tree, token->tag_id, MyHTML_NAMESPACE_HTML, false);
                 
                 myhtml_tree_active_formatting_up_to_last_marker(tree);
                 
@@ -2625,7 +2540,7 @@ bool myhtml_insertion_mode_in_cell(myhtml_tree_t* tree, myhtml_token_node_t* tok
             case MyHTML_TAG_THEAD:
             case MyHTML_TAG_TR:
             {
-                myhtml_tree_node_t* node = myhtml_tree_element_in_scope(tree, token->tag_ctx_idx, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE_TABLE);
+                myhtml_tree_node_t* node = myhtml_tree_element_in_scope(tree, token->tag_id, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE_TABLE);
                 
                 if(node == NULL)
                     // parse error
@@ -2649,7 +2564,7 @@ bool myhtml_insertion_mode_in_cell(myhtml_tree_t* tree, myhtml_token_node_t* tok
         }
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG_CAPTION:
             case MyHTML_TAG_COL:
@@ -2685,19 +2600,19 @@ bool myhtml_insertion_mode_in_select(myhtml_tree_t* tree, myhtml_token_node_t* t
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_OPTGROUP:
             {
                 myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
                 
-                if(current_node->tag_idx == MyHTML_TAG_OPTION &&
-                   current_node->my_namespace == MyHTML_NAMESPACE_HTML)
+                if(current_node->tag_id == MyHTML_TAG_OPTION &&
+                   current_node->ns == MyHTML_NAMESPACE_HTML)
                 {
                     if(tree->open_elements->length > 1) {
                         myhtml_tree_node_t *optgrp_node = tree->open_elements->list[ tree->open_elements->length - 2 ];
                         
-                        if(optgrp_node->tag_idx == MyHTML_TAG_OPTGROUP &&
-                           optgrp_node->my_namespace == MyHTML_NAMESPACE_HTML)
+                        if(optgrp_node->tag_id == MyHTML_TAG_OPTGROUP &&
+                           optgrp_node->ns == MyHTML_NAMESPACE_HTML)
                         {
                             myhtml_tree_open_elements_pop(tree);
                         }
@@ -2709,8 +2624,8 @@ bool myhtml_insertion_mode_in_select(myhtml_tree_t* tree, myhtml_token_node_t* t
                 
                 current_node = myhtml_tree_current_node(tree);
                 
-                if(current_node->tag_idx == MyHTML_TAG_OPTGROUP &&
-                   current_node->my_namespace == MyHTML_NAMESPACE_HTML)
+                if(current_node->tag_id == MyHTML_TAG_OPTGROUP &&
+                   current_node->ns == MyHTML_NAMESPACE_HTML)
                     myhtml_tree_open_elements_pop(tree);
                 else
                     // parse error
@@ -2723,8 +2638,8 @@ bool myhtml_insertion_mode_in_select(myhtml_tree_t* tree, myhtml_token_node_t* t
             {
                 myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
                 
-                if(current_node->tag_idx == MyHTML_TAG_OPTION &&
-                   current_node->my_namespace == MyHTML_NAMESPACE_HTML)
+                if(current_node->tag_id == MyHTML_TAG_OPTION &&
+                   current_node->ns == MyHTML_NAMESPACE_HTML)
                     myhtml_tree_open_elements_pop(tree);
                 else
                     // parse error
@@ -2757,13 +2672,13 @@ bool myhtml_insertion_mode_in_select(myhtml_tree_t* tree, myhtml_token_node_t* t
         }
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG__TEXT: {
                 if(token->type & MyHTML_TOKEN_TYPE_NULL) {
                     myhtml_insertion_fix_for_null_char_drop_all(tree, token);
                     
-                    if(token->my_str_tm.length)
+                    if(token->str.length)
                         myhtml_tree_node_insert_text(tree, token);
                 }
                 else
@@ -2786,7 +2701,7 @@ bool myhtml_insertion_mode_in_select(myhtml_tree_t* tree, myhtml_token_node_t* t
             {
                 myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
                 
-                if(myhtml_is_html_node(current_node, token->tag_ctx_idx))
+                if(myhtml_is_html_node(current_node, token->tag_id))
                     myhtml_tree_open_elements_pop(tree);
                 
                 myhtml_tree_node_insert_html_element(tree, token);
@@ -2797,14 +2712,14 @@ bool myhtml_insertion_mode_in_select(myhtml_tree_t* tree, myhtml_token_node_t* t
             {
                 myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
                 
-                if(current_node->tag_idx == MyHTML_TAG_OPTION &&
-                   current_node->my_namespace == MyHTML_NAMESPACE_HTML)
+                if(current_node->tag_id == MyHTML_TAG_OPTION &&
+                   current_node->ns == MyHTML_NAMESPACE_HTML)
                     myhtml_tree_open_elements_pop(tree);
                 
                 current_node = myhtml_tree_current_node(tree);
                 
-                if(current_node->tag_idx == token->tag_ctx_idx &&
-                   current_node->my_namespace == MyHTML_NAMESPACE_HTML)
+                if(current_node->tag_id == token->tag_id &&
+                   current_node->ns == MyHTML_NAMESPACE_HTML)
                     myhtml_tree_open_elements_pop(tree);
                 
                 myhtml_tree_node_insert_html_element(tree, token);
@@ -2861,7 +2776,7 @@ bool myhtml_insertion_mode_in_select_in_table(myhtml_tree_t* tree, myhtml_token_
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_CAPTION:
             case MyHTML_TAG_TABLE:
             case MyHTML_TAG_TBODY:
@@ -2872,7 +2787,7 @@ bool myhtml_insertion_mode_in_select_in_table(myhtml_tree_t* tree, myhtml_token_
             case MyHTML_TAG_TH:
             {
                 // parse error
-                myhtml_tree_node_t* some_node = myhtml_tree_element_in_scope(tree, token->tag_ctx_idx, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE_TABLE);
+                myhtml_tree_node_t* some_node = myhtml_tree_element_in_scope(tree, token->tag_id, MyHTML_NAMESPACE_HTML, MyHTML_TAG_CATEGORIES_SCOPE_TABLE);
                 
                 if(some_node == NULL)
                     break;
@@ -2888,7 +2803,7 @@ bool myhtml_insertion_mode_in_select_in_table(myhtml_tree_t* tree, myhtml_token_
         }
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG_CAPTION:
             case MyHTML_TAG_TABLE:
@@ -2918,7 +2833,7 @@ bool myhtml_insertion_mode_in_template(myhtml_tree_t* tree, myhtml_token_node_t*
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_TEMPLATE:
                 return myhtml_insertion_mode_in_body(tree, token);
                 
@@ -2927,7 +2842,7 @@ bool myhtml_insertion_mode_in_template(myhtml_tree_t* tree, myhtml_token_node_t*
         }
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG__TEXT:
             case MyHTML_TAG__COMMENT:
@@ -3013,7 +2928,7 @@ bool myhtml_insertion_mode_after_body(myhtml_tree_t* tree, myhtml_token_node_t* 
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_HTML:
             {
                 if(tree->fragment) {
@@ -3031,7 +2946,7 @@ bool myhtml_insertion_mode_after_body(myhtml_tree_t* tree, myhtml_token_node_t* 
         }
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG__TEXT:
             {
@@ -3054,9 +2969,9 @@ bool myhtml_insertion_mode_after_body(myhtml_tree_t* tree, myhtml_token_node_t* 
                 // state 2
                 myhtml_tree_node_t* node = myhtml_tree_node_create(tree);
                 
-                node->tag_idx      = MyHTML_TAG__COMMENT;
+                node->tag_id      = MyHTML_TAG__COMMENT;
                 node->token        = token;
-                node->my_namespace = adjusted_location->my_namespace;
+                node->ns = adjusted_location->ns;
                 
                 myhtml_tree_node_add_child(tree, adjusted_location, node);
                 
@@ -3087,7 +3002,7 @@ bool myhtml_insertion_mode_in_frameset(myhtml_tree_t* tree, myhtml_token_node_t*
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_FRAMESET:
             {
                 myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
@@ -3101,8 +3016,8 @@ bool myhtml_insertion_mode_in_frameset(myhtml_tree_t* tree, myhtml_token_node_t*
                 current_node = myhtml_tree_current_node(tree);
                 
                 if(tree->fragment == NULL &&
-                   !(current_node->tag_idx == MyHTML_TAG_FRAMESET &&
-                     current_node->my_namespace == MyHTML_NAMESPACE_HTML))
+                   !(current_node->tag_id == MyHTML_TAG_FRAMESET &&
+                     current_node->ns == MyHTML_NAMESPACE_HTML))
                 {
                     tree->insert_mode = MyHTML_INSERTION_MODE_AFTER_FRAMESET;
                 }
@@ -3115,7 +3030,7 @@ bool myhtml_insertion_mode_in_frameset(myhtml_tree_t* tree, myhtml_token_node_t*
         }
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG__TEXT:
             {
@@ -3126,12 +3041,9 @@ bool myhtml_insertion_mode_in_frameset(myhtml_tree_t* tree, myhtml_token_node_t*
                 
                 // parse error
                 myhtml_token_node_wait_for_done(token);
-                myhtml_string_stay_only_whitespace(&token->my_str_tm);
+                myhtml_string_stay_only_whitespace(&token->str);
                 
-                token->length = token->my_str_tm.length;
-                
-                // TODO: set to cache chars if length == 0
-                if(token->length)
+                if(token->str.length)
                     myhtml_tree_node_insert_text(tree, token);
                 
                 break;
@@ -3186,7 +3098,7 @@ bool myhtml_insertion_mode_after_frameset(myhtml_tree_t* tree, myhtml_token_node
 {
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE)
     {
-        switch (token->tag_ctx_idx) {
+        switch (token->tag_id) {
             case MyHTML_TAG_HTML:
                 tree->insert_mode = MyHTML_INSERTION_MODE_AFTER_AFTER_FRAMESET;
                 break;
@@ -3196,7 +3108,7 @@ bool myhtml_insertion_mode_after_frameset(myhtml_tree_t* tree, myhtml_token_node
         }
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG__TEXT:
             {
@@ -3207,12 +3119,9 @@ bool myhtml_insertion_mode_after_frameset(myhtml_tree_t* tree, myhtml_token_node
                 
                 // parse error
                 myhtml_token_node_wait_for_done(token);
-                myhtml_string_stay_only_whitespace(&token->my_str_tm);
+                myhtml_string_stay_only_whitespace(&token->str);
                 
-                token->length = token->my_str_tm.length;
-                
-                // TODO: set to cache chars if length == 0
-                if(token->length)
+                if(token->str.length)
                     myhtml_tree_node_insert_text(tree, token);
                 
                 break;
@@ -3254,16 +3163,16 @@ bool myhtml_insertion_mode_after_after_body(myhtml_tree_t* tree, myhtml_token_no
         return true;
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG__COMMENT:
             {
                 myhtml_tree_node_t* adjusted_location = tree->document;
                 myhtml_tree_node_t* node = myhtml_tree_node_create(tree);
                 
-                node->tag_idx      = MyHTML_TAG__COMMENT;
+                node->tag_id      = MyHTML_TAG__COMMENT;
                 node->token        = token;
-                node->my_namespace = adjusted_location->my_namespace;
+                node->ns = adjusted_location->ns;
                 
                 myhtml_tree_node_add_child(tree, adjusted_location, node);
                 break;
@@ -3301,16 +3210,16 @@ bool myhtml_insertion_mode_after_after_frameset(myhtml_tree_t* tree, myhtml_toke
         return false;
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG__COMMENT:
             {
                 myhtml_tree_node_t* adjusted_location = tree->document;
                 myhtml_tree_node_t* node = myhtml_tree_node_create(tree);
                 
-                node->tag_idx      = MyHTML_TAG__COMMENT;
+                node->tag_id      = MyHTML_TAG__COMMENT;
                 node->token        = token;
-                node->my_namespace = adjusted_location->my_namespace;
+                node->ns = adjusted_location->ns;
                 
                 myhtml_tree_node_add_child(tree, adjusted_location, node);
                 break;
@@ -3351,7 +3260,7 @@ bool myhtml_insertion_mode_after_after_frameset(myhtml_tree_t* tree, myhtml_toke
 
 bool myhtml_insertion_mode_in_foreign_content_end_other(myhtml_tree_t* tree, myhtml_tree_node_t* current_node, myhtml_token_node_t* token)
 {
-    if(current_node->tag_idx != token->tag_ctx_idx) {
+    if(current_node->tag_id != token->tag_id) {
         // parse error
     }
     
@@ -3364,14 +3273,14 @@ bool myhtml_insertion_mode_in_foreign_content_end_other(myhtml_tree_t* tree, myh
         {
             current_node = list[i];
             
-            if(current_node->tag_idx == token->tag_ctx_idx) {
+            if(current_node->tag_id == token->tag_id) {
                 myhtml_tree_open_elements_pop_until_by_node(tree, current_node, false);
                 return false;
             }
             
             i--;
             
-            if(list[i]->my_namespace == MyHTML_NAMESPACE_HTML)
+            if(list[i]->ns == MyHTML_NAMESPACE_HTML)
                 break;
         }
     }
@@ -3385,22 +3294,22 @@ bool myhtml_insertion_mode_in_foreign_content_start_other(myhtml_tree_t* tree, m
     
     myhtml_token_node_wait_for_done(token);
     
-    if(adjusted_node->my_namespace == MyHTML_NAMESPACE_MATHML) {
+    if(adjusted_node->ns == MyHTML_NAMESPACE_MATHML) {
         myhtml_token_adjust_mathml_attributes(token);
     }
-    else if(adjusted_node->my_namespace == MyHTML_NAMESPACE_SVG) {
+    else if(adjusted_node->ns == MyHTML_NAMESPACE_SVG) {
         myhtml_token_adjust_svg_attributes(token);
     }
     
     myhtml_token_adjust_foreign_attributes(token);
     
     myhtml_tree_node_t* node = myhtml_tree_node_insert_foreign_element(tree, token);
-    node->my_namespace = adjusted_node->my_namespace;
+    node->ns = adjusted_node->ns;
     
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE_SELF)
     {
-        if(token->tag_ctx_idx == MyHTML_TAG_SCRIPT &&
-           node->my_namespace == MyHTML_NAMESPACE_SVG)
+        if(token->tag_id == MyHTML_TAG_SCRIPT &&
+           node->ns == MyHTML_NAMESPACE_SVG)
         {
             return myhtml_insertion_mode_in_foreign_content_end_other(tree, myhtml_tree_current_node(tree), token);
         }
@@ -3417,9 +3326,9 @@ bool myhtml_insertion_mode_in_foreign_content(myhtml_tree_t* tree, myhtml_token_
     if(token->type & MyHTML_TOKEN_TYPE_CLOSE) {
         myhtml_tree_node_t* current_node = myhtml_tree_current_node(tree);
         
-        if(token->tag_ctx_idx == MyHTML_TAG_SCRIPT &&
-           current_node->tag_idx == MyHTML_TAG_SCRIPT &&
-           current_node->my_namespace == MyHTML_NAMESPACE_SVG)
+        if(token->tag_id == MyHTML_TAG_SCRIPT &&
+           current_node->tag_id == MyHTML_TAG_SCRIPT &&
+           current_node->ns == MyHTML_NAMESPACE_SVG)
         {
             myhtml_tree_open_elements_pop(tree);
             // TODO: now script is disable, skip this
@@ -3429,7 +3338,7 @@ bool myhtml_insertion_mode_in_foreign_content(myhtml_tree_t* tree, myhtml_token_
         return myhtml_insertion_mode_in_foreign_content_end_other(tree, current_node, token);
     }
     else {
-        switch (token->tag_ctx_idx)
+        switch (token->tag_id)
         {
             case MyHTML_TAG__TEXT:
             {
@@ -3500,7 +3409,7 @@ bool myhtml_insertion_mode_in_foreign_content(myhtml_tree_t* tree, myhtml_token_
             case MyHTML_TAG_FONT:
             {
                 // parse error
-                if(token->tag_ctx_idx == MyHTML_TAG_FONT)
+                if(token->tag_id == MyHTML_TAG_FONT)
                 {
                     myhtml_token_node_wait_for_done(token);
                     
@@ -3519,7 +3428,7 @@ bool myhtml_insertion_mode_in_foreign_content(myhtml_tree_t* tree, myhtml_token_
                     }
                     while(current_node && !(myhtml_tree_is_mathml_integration_point(tree, current_node) ||
                                             myhtml_tree_is_html_integration_point(tree, current_node) ||
-                                            current_node->my_namespace == MyHTML_NAMESPACE_HTML));
+                                            current_node->ns == MyHTML_NAMESPACE_HTML));
                     
                     return true;
                 }
@@ -3543,17 +3452,16 @@ bool myhtml_rules_check_for_first_newline(myhtml_tree_t* tree, myhtml_token_node
     if(tree->flags & MyHTML_TREE_FLAGS_PARSE_FLAG) {
         if(tree->flags &MyHTML_TREE_FLAGS_PARSE_FLAG_EMIT_NEWLINE)
         {
-            if(token->tag_ctx_idx == MyHTML_TAG__TEXT) {
+            if(token->tag_id == MyHTML_TAG__TEXT) {
                 myhtml_token_node_wait_for_done(token);
                 
-                if(token->length > 0) {
-                    if(token->my_str_tm.data[0] == '\n') {
-                        token->my_str_tm.data = mchar_async_crop_first_chars_without_cache(token->my_str_tm.data, 1);
+                if(token->str.length > 0) {
+                    if(token->str.data[0] == '\n') {
+                        token->str.data = mchar_async_crop_first_chars_without_cache(token->str.data, 1);
                         
-                        token->my_str_tm.length--;
-                        token->length--;
+                        token->str.length--;
                         
-                        if(token->length == 0) {
+                        if(token->str.length == 0) {
                             tree->flags ^= (tree->flags & MyHTML_TREE_FLAGS_PARSE_FLAG);
                             return true;
                         }
@@ -3582,28 +3490,28 @@ bool myhtml_rules_tree_dispatcher(myhtml_tree_t* tree, myhtml_token_node_t* toke
     bool reprocess = false;
     myhtml_tree_node_t* adjusted_node = myhtml_tree_adjusted_current_node(tree);
     
-    if(tree->open_elements->length == 0 || adjusted_node->my_namespace == MyHTML_NAMESPACE_HTML) {
+    if(tree->open_elements->length == 0 || adjusted_node->ns == MyHTML_NAMESPACE_HTML) {
         reprocess = tree->myhtml->insertion_func[tree->insert_mode](tree, token);
     }
     else if(myhtml_tree_is_mathml_integration_point(tree, adjusted_node) &&
-            ((token->tag_ctx_idx == MyHTML_TAG__TEXT ||
-              (token->tag_ctx_idx != MyHTML_TAG_MGLYPH && token->tag_ctx_idx != MyHTML_TAG_MALIGNMARK)) &&
+            ((token->tag_id == MyHTML_TAG__TEXT ||
+              (token->tag_id != MyHTML_TAG_MGLYPH && token->tag_id != MyHTML_TAG_MALIGNMARK)) &&
              (token->type & MyHTML_TOKEN_TYPE_CLOSE) == 0))
     {
             reprocess = tree->myhtml->insertion_func[tree->insert_mode](tree, token);
     }
-    else if(adjusted_node->tag_idx == MyHTML_TAG_ANNOTATION_XML &&
-       adjusted_node->my_namespace == MyHTML_NAMESPACE_MATHML &&
-       token->tag_ctx_idx == MyHTML_TAG_SVG && (token->type & MyHTML_TOKEN_TYPE_CLOSE) == 0)
+    else if(adjusted_node->tag_id == MyHTML_TAG_ANNOTATION_XML &&
+       adjusted_node->ns == MyHTML_NAMESPACE_MATHML &&
+       token->tag_id == MyHTML_TAG_SVG && (token->type & MyHTML_TOKEN_TYPE_CLOSE) == 0)
     {
         reprocess = tree->myhtml->insertion_func[tree->insert_mode](tree, token);
     }
     else if(myhtml_tree_is_html_integration_point(tree, adjusted_node) &&
-            ((token->type & MyHTML_TOKEN_TYPE_CLOSE) == 0 || token->tag_ctx_idx == MyHTML_TAG__TEXT))
+            ((token->type & MyHTML_TOKEN_TYPE_CLOSE) == 0 || token->tag_id == MyHTML_TAG__TEXT))
     {
         reprocess = tree->myhtml->insertion_func[tree->insert_mode](tree, token);
     }
-    else if(token->tag_ctx_idx == MyHTML_TAG__END_OF_FILE)
+    else if(token->tag_id == MyHTML_TAG__END_OF_FILE)
         reprocess = tree->myhtml->insertion_func[tree->insert_mode](tree, token);
     else
         reprocess = myhtml_insertion_mode_in_foreign_content(tree, token);
@@ -3617,7 +3525,7 @@ bool myhtml_rules_tree_dispatcher(myhtml_tree_t* tree, myhtml_token_node_t* toke
 
 myhtml_status_t myhtml_rules_init(myhtml_t* myhtml)
 {
-    myhtml->insertion_func = (myhtml_insertion_f*)mymalloc(sizeof(myhtml_insertion_f) * MyHTML_INSERTION_MODE_LAST_ENTRY);
+    myhtml->insertion_func = (myhtml_insertion_f*)myhtml_malloc(sizeof(myhtml_insertion_f) * MyHTML_INSERTION_MODE_LAST_ENTRY);
     
     if(myhtml->insertion_func == NULL)
         return MyHTML_STATUS_RULES_ERROR_MEMORY_ALLOCATION;

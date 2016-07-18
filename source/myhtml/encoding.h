@@ -1,17 +1,19 @@
 /*
- Copyright 2015-2016 Alexander Borisov
+ Copyright (C) 2015-2016 Alexander Borisov
  
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
  
- http://www.apache.org/licenses/LICENSE-2.0
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ Lesser General Public License for more details.
  
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  
  Author: lex.borisov@gmail.com (Alexander Borisov)
 */
@@ -25,6 +27,7 @@ extern "C" {
 #endif
 
 #include "myhtml/myosi.h"
+#include "myhtml/utils.h"
 
 enum myhtml_encoding_status {
     MyHTML_ENCODING_STATUS_OK       = 0x00,
@@ -62,6 +65,19 @@ struct myhtml_encoding_unicode_result {
     size_t count_bad;
 }
 typedef myhtml_encoding_unicode_result_t;
+
+struct myhtml_encoding_detect_name_entry {
+    const char* name;
+    size_t name_length;
+    const char* label;
+    size_t label_length;
+    
+    myhtml_encoding_t encoding;
+    
+    size_t next;
+    size_t curr;
+}
+typedef myhtml_encoding_detect_name_entry_t;
 
 typedef myhtml_encoding_status_t (*myhtml_encoding_custom_f)(unsigned const char data, myhtml_encoding_result_t *res);
 
@@ -109,6 +125,7 @@ enum myhtml_encoding_status myhtml_encoding_decode_utf_16le(unsigned const char 
 enum myhtml_encoding_status myhtml_encoding_decode_x_user_defined(unsigned const char data, myhtml_encoding_result_t *res);
 
 size_t myhtml_encoding_codepoint_to_ascii_utf_8(size_t codepoint, char *data);
+size_t myhtml_encoding_codepoint_to_lowercase_ascii_utf_8(size_t codepoint, char *data);
 size_t myhtml_encoding_codepoint_to_ascii_utf_16(size_t codepoint, char *data);
 
 void myhtml_encoding_result_clean(myhtml_encoding_result_t *res);
@@ -118,6 +135,9 @@ bool myhtml_encoding_detect_russian(const char *text, size_t length, myhtml_enco
 bool myhtml_encoding_detect_unicode(const char *text, size_t length, myhtml_encoding_t *encoding);
 bool myhtml_encoding_detect_bom(const char *text, size_t length, myhtml_encoding_t *encoding);
 bool myhtml_encoding_detect_and_cut_bom(const char *text, size_t length, myhtml_encoding_t *encoding, const char **new_text, size_t *new_size);
+
+const myhtml_encoding_detect_name_entry_t * myhtml_encoding_name_entry_by_name(const char* name, size_t length);
+bool myhtml_encoding_by_name(const char *name, size_t length, myhtml_encoding_t *encoding);
 
 #ifdef __cplusplus
 } /* extern "C" */

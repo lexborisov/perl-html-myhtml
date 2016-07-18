@@ -101,6 +101,155 @@ last_child(node)
 	  if(RETVAL == NULL)
 		XSRETURN_UNDEF;
 
+#=sort 6
+
+SV*
+get_nodes_by_attribute_key(node, tree, key, out_status = &PL_sv_undef)
+	HTML::MyHTML::Tree::Node node;
+	HTML::MyHTML::Tree tree;
+	SV* key;
+	SV* out_status;
+	
+	PREINIT:
+		STRLEN len;
+	CODE:
+		const char *char_key = NULL;
+		
+		if(SvOK(key)) {
+			char_key = SvPV(key, len);
+		}
+		
+		myhtml_status_t status;
+		myhtml_collection_t *collection = myhtml_get_nodes_by_attribute_key(tree, NULL, node, char_key, len, &status);
+		sm_set_out_status(out_status, status);
+		
+		if(status == MyHTML_STATUS_OK) {
+			RETVAL = newRV_noinc((SV *)sm_get_elements_by_collections(collection));
+		}
+		else {
+			RETVAL = &PL_sv_undef;
+		}
+	OUTPUT:
+		RETVAL
+
+#=sort 6
+
+SV*
+get_nodes_by_attribute_value(node, tree, case_insensitive, key, value, out_status = &PL_sv_undef)
+	HTML::MyHTML::Tree::Node node;
+	HTML::MyHTML::Tree tree;
+	SV* case_insensitive;
+	SV* key;
+	SV* value;
+	SV* out_status;
+	
+	CODE:
+		RETVAL = sm_get_nodes_by_attribute_value(node, tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value);
+		
+	OUTPUT:
+		RETVAL
+
+#=sort 6
+
+SV*
+get_nodes_by_attribute_value_whitespace_separated(node, tree, case_insensitive, key, value, out_status = &PL_sv_undef)
+	HTML::MyHTML::Tree::Node node;
+	HTML::MyHTML::Tree tree;
+	SV* case_insensitive;
+	SV* key;
+	SV* value;
+	SV* out_status;
+	
+	CODE:
+		RETVAL = sm_get_nodes_by_attribute_value(node, tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value_whitespace_separated);
+		
+	OUTPUT:
+		RETVAL
+
+#=sort 6
+
+SV*
+get_nodes_by_attribute_value_begin(node, tree, case_insensitive, key, value, out_status = &PL_sv_undef)
+	HTML::MyHTML::Tree::Node node;
+	HTML::MyHTML::Tree tree;
+	SV* case_insensitive;
+	SV* key;
+	SV* value;
+	SV* out_status;
+	
+	CODE:
+		RETVAL = sm_get_nodes_by_attribute_value(node, tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value_begin);
+		
+	OUTPUT:
+		RETVAL
+
+SV*
+get_nodes_by_attribute_value_end(node, tree, case_insensitive, key, value, out_status = &PL_sv_undef)
+	HTML::MyHTML::Tree::Node node;
+	HTML::MyHTML::Tree tree;
+	SV* case_insensitive;
+	SV* key;
+	SV* value;
+	SV* out_status;
+	
+	CODE:
+		RETVAL = sm_get_nodes_by_attribute_value(node, tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value_end);
+		
+	OUTPUT:
+		RETVAL
+
+SV*
+get_nodes_by_attribute_value_contain(node, tree, case_insensitive, key, value, out_status = &PL_sv_undef)
+	HTML::MyHTML::Tree::Node node;
+	HTML::MyHTML::Tree tree;
+	SV* case_insensitive;
+	SV* key;
+	SV* value;
+	SV* out_status;
+	
+	CODE:
+		RETVAL = sm_get_nodes_by_attribute_value(node, tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value_contain);
+		
+	OUTPUT:
+		RETVAL
+
+SV*
+get_nodes_by_attribute_value_hyphen_separated(node, tree, case_insensitive, key, value, out_status = &PL_sv_undef)
+	HTML::MyHTML::Tree::Node node;
+	HTML::MyHTML::Tree tree;
+	SV* case_insensitive;
+	SV* key;
+	SV* value;
+	SV* out_status;
+	
+	CODE:
+		RETVAL = sm_get_nodes_by_attribute_value(node, tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value_hyphen_separated);
+		
+	OUTPUT:
+		RETVAL
+
+SV*
+get_nodes_by_tag_id(node, tree, tag_id, out_status = &PL_sv_undef)
+	HTML::MyHTML::Tree::Node node;
+	HTML::MyHTML::Tree tree;
+	myhtml_tag_id_t tag_id;
+	SV* out_status;
+	
+	CODE:
+		myhtml_status_t status;
+		myhtml_collection_t* collection = myhtml_get_nodes_by_tag_id_in_scope(tree, NULL, node, tag_id, &status);
+		sm_set_out_status(out_status, status);
+		
+		if(status == MyHTML_STATUS_OK) {
+			RETVAL = newRV_noinc((SV *)sm_get_elements_by_collections(collection));
+		}
+		else {
+			RETVAL = &PL_sv_undef;
+		}
+		
+	OUTPUT:
+		RETVAL
+
 #=sort 7
 
 void
@@ -114,11 +263,12 @@ free(node, tree)
 #=sort 8
 
 HTML::MyHTML::Tree::Node
-remove(node)
+remove(node, tree)
 	HTML::MyHTML::Tree::Node node;
+	HTML::MyHTML::Tree tree;
 	
 	CODE:
-		RETVAL = myhtml_node_remove(node);
+		RETVAL = myhtml_node_remove(tree, node);
 	OUTPUT:
 		RETVAL
 
@@ -308,7 +458,7 @@ print_children(node, tree, fh, inc)
 	size_t inc;
 	
 	CODE:
-		myhtml_tree_print_node_childs(tree, node, fh, inc);
+		myhtml_tree_print_node_children(tree, node, fh, inc);
 
 #=sort 24
 

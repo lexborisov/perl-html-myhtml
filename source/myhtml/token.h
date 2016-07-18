@@ -1,17 +1,19 @@
 /*
- Copyright 2015 Alexander Borisov
+ Copyright (C) 2015-2016 Alexander Borisov
  
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
  
- http://www.apache.org/licenses/LICENSE-2.0
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ Lesser General Public License for more details.
  
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  
  Author: lex.borisov@gmail.com (Alexander Borisov)
 */
@@ -35,15 +37,15 @@ extern "C" {
 #include "myhtml/utils/mchar_async.h"
 #include "myhtml/utils/mcsync.h"
 
-#define myhtml_token_attr_malloc(__token__, __attr_node__, __thread_idx__)                  \
-    __attr_node__ = mcobject_async_malloc(__token__->attr_obj, __thread_idx__, NULL);       \
-    myhtml_token_attr_clean(__attr_node__)
+#define myhtml_token_attr_malloc(token, attr_node, thread_idx)                  \
+    attr_node = mcobject_async_malloc(token->attr_obj, thread_idx, NULL);       \
+    myhtml_token_attr_clean(attr_node)
 
-#define myhtml_token_node_set_done(__token_node__) __token_node__->type |= MyHTML_TOKEN_TYPE_DONE
+#define myhtml_token_node_set_done(token_node) token_node->type |= MyHTML_TOKEN_TYPE_DONE
 
-#define myhtml_token_node_malloc(__token__, __token_node__, __thread_id__)                                    \
-    __token_node__ = (myhtml_token_node_t*)mcobject_async_malloc(__token__->nodes_obj, __thread_id__, NULL);  \
-    myhtml_token_node_clean(__token_node__)
+#define myhtml_token_node_malloc(token, token_node, thread_idx)                                    \
+    token_node = (myhtml_token_node_t*)mcobject_async_malloc(token->nodes_obj, thread_idx, NULL);  \
+    myhtml_token_node_clean(token_node)
 
 struct myhtml_token_replacement_entry {
     char* from;
@@ -60,30 +62,34 @@ struct myhtml_token_namespace_replacement {
     char* to;
     size_t to_size;
     
-    enum myhtml_namespace my_namespace;
+    enum myhtml_namespace ns;
 };
 
 struct myhtml_token_attr {
     myhtml_token_attr_t* next;
     myhtml_token_attr_t* prev;
     
-    myhtml_string_t entry;
+    myhtml_string_t key;
+    myhtml_string_t value;
     
-    size_t name_begin;
-    size_t name_length;
-    size_t value_begin;
-    size_t value_length;
+    size_t raw_key_begin;
+    size_t raw_key_length;
+    size_t raw_value_begin;
+    size_t raw_value_length;
     
-    enum myhtml_namespace my_namespace;
+    enum myhtml_namespace ns;
 };
 
 struct myhtml_token_node {
-    myhtml_tag_id_t tag_ctx_idx;
+    myhtml_tag_id_t tag_id;
     
-    myhtml_string_t my_str_tm;
+    myhtml_string_t str;
     
-    size_t begin;
-    size_t length;
+    size_t raw_begin;
+    size_t raw_length;
+    
+    size_t element_begin;
+    size_t element_length;
     
     myhtml_token_attr_t* attr_first;
     myhtml_token_attr_t* attr_last;
@@ -109,6 +115,18 @@ void myhtml_token_clean(myhtml_token_t* token);
 void myhtml_token_clean_all(myhtml_token_t* token);
 myhtml_token_t * myhtml_token_destroy(myhtml_token_t* token);
 
+myhtml_tag_id_t myhtml_token_node_tag_id(myhtml_token_node_t *token_node);
+myhtml_position_t myhtml_token_node_raw_pasition(myhtml_token_node_t *token_node);
+myhtml_position_t myhtml_token_node_element_pasition(myhtml_token_node_t *token_node);
+
+myhtml_tree_attr_t * myhtml_token_node_attribute_first(myhtml_token_node_t *token_node);
+myhtml_tree_attr_t * myhtml_token_node_attribute_last(myhtml_token_node_t *token_node);
+
+const char * myhtml_token_node_text(myhtml_token_node_t *token_node, size_t *length);
+myhtml_string_t * myhtml_token_node_string(myhtml_token_node_t *token_node);
+
+bool myhtml_token_node_is_close_self(myhtml_token_node_t *token_node);
+
 void myhtml_token_node_clean(myhtml_token_node_t* node);
 void myhtml_token_attr_clean(myhtml_token_attr_t* attr);
 myhtml_token_attr_t * myhtml_token_attr_remove(myhtml_token_node_t* node, myhtml_token_attr_t* attr);
@@ -117,8 +135,6 @@ void myhtml_token_attr_delete_all(myhtml_token_t* token, myhtml_token_node_t* no
 void myhtml_token_delete(myhtml_token_t* token, myhtml_token_node_t* node);
 void myhtml_token_node_wait_for_done(myhtml_token_node_t* node);
 void myhtml_token_set_done(myhtml_token_node_t* node);
-
-bool myhtml_token_is_whithspace(myhtml_tree_t* tree, myhtml_token_node_t* node);
 
 myhtml_token_attr_t * myhtml_token_attr_match(myhtml_token_t* token, myhtml_token_node_t* target, const char* key, size_t key_size, const char* value, size_t value_size);
 myhtml_token_attr_t * myhtml_token_attr_match_case(myhtml_token_t* token, myhtml_token_node_t* target, const char* key, size_t key_size, const char* value, size_t value_size);

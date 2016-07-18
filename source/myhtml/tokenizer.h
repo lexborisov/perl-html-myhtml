@@ -1,17 +1,19 @@
 /*
- Copyright 2015-2016 Alexander Borisov
+ Copyright (C) 2015-2016 Alexander Borisov
  
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
  
- http://www.apache.org/licenses/LICENSE-2.0
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ Lesser General Public License for more details.
  
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  
  Author: lex.borisov@gmail.com (Alexander Borisov)
 */
@@ -37,19 +39,20 @@ extern "C" {
 #define MyHTML_TOKENIZER_CHAR_A_Z_a_z      '\001'
 #define MyHTML_TOKENIZER_CHAR_WHITESPACE   '\002'
     
-#define myhtml_tokenizer_inc_html_offset(__offset__, __size__)   \
-    __offset__++;                                            \
-    if(__offset__ >= __size__)                               \
-        return __offset__
+#define myhtml_tokenizer_inc_html_offset(offset, size)   \
+    offset++;                                            \
+    if(offset >= size)                                   \
+        return offset
 
-void myhtml_tokenizer_begin(myhtml_tree_t* tree, const char* html, size_t html_length);
-void myhtml_tokenizer_chunk(myhtml_tree_t* tree, const char* html, size_t html_length);
-void myhtml_tokenizer_end(myhtml_tree_t* tree);
-void myhtml_tokenizer_set_state(myhtml_tree_t* tree, mythread_queue_node_t* qnode);
+myhtml_status_t myhtml_tokenizer_begin(myhtml_tree_t* tree, const char* html, size_t html_length);
+myhtml_status_t myhtml_tokenizer_chunk(myhtml_tree_t* tree, const char* html, size_t html_length);
+myhtml_status_t myhtml_tokenizer_chunk_with_stream_buffer(myhtml_tree_t* tree, const char* html, size_t html_length);
+myhtml_status_t myhtml_tokenizer_end(myhtml_tree_t* tree);
+void myhtml_tokenizer_set_state(myhtml_tree_t* tree, myhtml_token_node_t* token_node);
 
-void myhtml_tokenizer_calc_current_namespace(myhtml_tree_t* tree, mythread_queue_node_t* qnode);
+void myhtml_tokenizer_calc_current_namespace(myhtml_tree_t* tree, myhtml_token_node_t* token_node);
 
-myhtml_tree_node_t * myhtml_tokenizer_fragment_init(myhtml_tree_t* tree, myhtml_tag_id_t tag_idx, enum myhtml_namespace my_namespace);
+myhtml_tree_node_t * myhtml_tokenizer_fragment_init(myhtml_tree_t* tree, myhtml_tag_id_t tag_idx, enum myhtml_namespace ns);
 
 void myhtml_tokenizer_wait(myhtml_tree_t* tree);
 void myhtml_tokenizer_post(myhtml_tree_t* tree);
@@ -58,10 +61,10 @@ void myhtml_tokenizer_pause(myhtml_tree_t* tree);
 myhtml_status_t myhtml_tokenizer_state_init(myhtml_t* myhtml);
 void myhtml_tokenizer_state_destroy(myhtml_t* myhtml);
 
-mythread_queue_node_t * myhtml_tokenizer_queue_create_text_node_if_need(myhtml_tree_t* tree, mythread_queue_node_t* qnode, const char* html, size_t html_offset, enum myhtml_token_type type);
-void myhtml_check_tag_parser(myhtml_tree_t* tree, mythread_queue_node_t* qnode, const char* html, size_t html_offset);
+myhtml_token_node_t * myhtml_tokenizer_queue_create_text_node_if_need(myhtml_tree_t* tree, myhtml_token_node_t* token_node, const char* html, size_t absolute_html_offset, enum myhtml_token_type type);
+void myhtml_check_tag_parser(myhtml_tree_t* tree, myhtml_token_node_t* token_node, const char* html, size_t html_offset);
 
-size_t myhtml_tokenizer_state_bogus_comment(myhtml_tree_t* tree, mythread_queue_node_t* qnode, const char* html, size_t html_offset, size_t html_size);
+size_t myhtml_tokenizer_state_bogus_comment(myhtml_tree_t* tree, myhtml_token_node_t* token_node, const char* html, size_t html_offset, size_t html_size);
 
 #ifdef __cplusplus
 } /* extern "C" */

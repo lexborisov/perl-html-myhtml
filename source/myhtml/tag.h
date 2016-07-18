@@ -1,17 +1,19 @@
 /*
- Copyright 2015 Alexander Borisov
+ Copyright (C) 2015-2016 Alexander Borisov
  
- Licensed under the Apache License, Version 2.0 (the "License");
- you may not use this file except in compliance with the License.
- You may obtain a copy of the License at
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
  
- http://www.apache.org/licenses/LICENSE-2.0
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ Lesser General Public License for more details.
  
- Unless required by applicable law or agreed to in writing, software
- distributed under the License is distributed on an "AS IS" BASIS,
- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- See the License for the specific language governing permissions and
- limitations under the License.
+ You should have received a copy of the GNU Lesser General Public
+ License along with this library; if not, write to the Free Software
+ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  
  Author: lex.borisov@gmail.com (Alexander Borisov)
 */
@@ -32,30 +34,31 @@ extern "C" {
 #include "myhtml/utils.h"
 #include "myhtml/utils/mctree.h"
 #include "myhtml/utils/mchar_async.h"
+#include "myhtml/utils/mcobject.h"
 #include "myhtml/utils/mcobject_async.h"
 #include "myhtml/utils/mcsimple.h"
 
-#define myhtml_tag_get(__tags__, __idx__, __attr__) __tags__->context[__idx__].__attr__
+#define myhtml_tag_get(tags, idx, attr) tags->context[idx].attr
 
-#define myhtml_tag_context_clean(__tags__, __idx__)                       \
-    __tags__->context[__idx__].id          = 0;                           \
-    __tags__->context[__idx__].name        = NULL;                        \
-    __tags__->context[__idx__].name_length = 0;                           \
-    __tags__->context[__idx__].data_parser = MyHTML_TOKENIZER_STATE_DATA; \
-    memset(__tags__->context[__idx__].cats, MyHTML_TAG_CATEGORIES_UNDEF, sizeof(__tags__->context[__idx__].cats));
+#define myhtml_tag_context_clean(tags, idx)                       \
+    tags->context[idx].id          = 0;                           \
+    tags->context[idx].name        = NULL;                        \
+    tags->context[idx].name_length = 0;                           \
+    tags->context[idx].data_parser = MyHTML_TOKENIZER_STATE_DATA; \
+    memset(tags->context[idx].cats, MyHTML_TAG_CATEGORIES_UNDEF, sizeof(tags->context[idx].cats));
 
 
-#define myhtml_tag_context_add(__tags__)                                         \
-    __tags__->context_length++;                                                  \
-    if(__tags__->context_length == __tags__->context_size) {                     \
-        __tags__->context_size += 4096;                                          \
-        __tags__->context = (myhtml_tag_context_t*)myrealloc(__tags__->context,  \
-            sizeof(myhtml_tag_context_t) * __tags__->context_size);              \
-    }                                                                            \
-    myhtml_tag_context_clean(__tags__, __tags__->context_length)
+#define myhtml_tag_context_add(tags)                                         \
+    tags->context_length++;                                                  \
+    if(tags->context_length == tags->context_size) {                         \
+        tags->context_size += 4096;                                          \
+        tags->context = (myhtml_tag_context_t*)myhtml_realloc(tags->context,      \
+            sizeof(myhtml_tag_context_t) * tags->context_size);              \
+    }                                                                        \
+    myhtml_tag_context_clean(tags, tags->context_length)
 
-#define myhtml_tag_index_clean_node(__index_node__) \
-    memset(__index_node__, 0, sizeof(myhtml_tag_index_node_t));
+#define myhtml_tag_index_clean_node(index_node)             \
+    memset(index_node, 0, sizeof(myhtml_tag_index_node_t));
 
 struct myhtml_tag_index_entry {
     myhtml_tag_index_node_t *first;
@@ -99,12 +102,10 @@ struct myhtml_tag {
     mcsimple_t* mcsimple_context;
     
     size_t tags_count;
-    
-    size_t mcobject_node;
     size_t mchar_node;
     
     mchar_async_t       *mchar;
-    mcobject_async_t    *tag_index;
+    mcobject_t          *mcobject_tag_index;
 };
 
 myhtml_tag_t * myhtml_tag_create(void);
@@ -116,7 +117,7 @@ myhtml_tag_id_t myhtml_tag_add(myhtml_tag_t* tags, const char* key, size_t key_s
                               enum myhtml_tokenizer_state data_parser, bool to_lcase);
 
 void myhtml_tag_set_category(myhtml_tag_t* tags, myhtml_tag_id_t tag_idx,
-                         enum myhtml_namespace my_namespace, enum myhtml_tag_categories cats);
+                         enum myhtml_namespace ns, enum myhtml_tag_categories cats);
 
 myhtml_tag_index_t * myhtml_tag_index_create(void);
 myhtml_status_t myhtml_tag_index_init(myhtml_tag_t* tags, myhtml_tag_index_t* tag_index);
