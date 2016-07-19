@@ -10,10 +10,12 @@ typemap
 
 examples/detect_encoding.pl
 examples/clear_text.pl
+examples/callback.pl
 
 xs/tree.xs
 xs/tree_attr.xs
 xs/tree_node.xs
+xs/token_node.xs
 
 source/myhtml/api.h
 source/myhtml/api_encoding.h

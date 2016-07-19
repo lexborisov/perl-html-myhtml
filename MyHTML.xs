@@ -61,6 +61,13 @@ typedef myhtml_tag_index_t * HTML__MyHTML__Tag__Index;
 typedef myhtml_tag_index_node_t * HTML__MyHTML__Tag__Index__Node;
 typedef myhtml_collection_t * HTML__MyHTML__Collection;
 typedef myhtml_string_t * HTML__MyHTML__String;
+typedef myhtml_token_node_t * HTML__MyHTML__Token__Node;
+
+struct myhtml_perl_callback_ctx {
+	SV* callback;
+	SV* ctx;
+}
+typedef myhtml_perl_callback_ctx_t;
 
 typedef myhtml_collection_t* (*myhtml_perl_get_attr_by_val_f)(myhtml_tree_t *tree, myhtml_collection_t* collection, myhtml_tree_node_t* node, bool case_insensitive,
                                     const char* key, size_t key_len, const char* value, size_t value_len, myhtml_status_t* status);
@@ -106,12 +113,10 @@ HV * sm_get_attr_info(myhtml_tree_attr_t* attr)
 	return hash;
 }
 
-HV * sm_get_node_attr_info(myhtml_tree_node_t* node)
+HV * sm_get_node_attr_info(myhtml_tree_attr_t* attr)
 {
 	HV* hash = newHV();
 	
-    myhtml_tree_attr_t* attr = myhtml_node_attribute_first(node);
-    
     while(attr)
     {
 		size_t name_len, value_len;
@@ -161,8 +166,17 @@ HV * sm_get_node_info(myhtml_tree_t *tree, myhtml_tree_node_t *node)
 	size_t length;
 	const char* tag_name = myhtml_tag_name_by_id(tree, myhtml_node_tag_id(node), &length);
 	
+	myhtml_position_t element_pos = myhtml_node_element_pasition(node);
+	myhtml_position_t raw_pos = myhtml_node_raw_pasition(node);
+	
 	ha = hv_store(hash, "tag", 3, newSVpv(tag_name, length), 0);
 	ha = hv_store(hash, "tag_id", 6, newSViv(myhtml_node_tag_id(node)), 0);
+	
+	ha = hv_store(hash, "element_begin", 13, newSViv(element_pos.begin), 0);
+	ha = hv_store(hash, "element_length", 14, newSViv(element_pos.length), 0);
+	
+	ha = hv_store(hash, "raw_begin", 9, newSViv(raw_pos.begin), 0);
+	ha = hv_store(hash, "raw_length", 10, newSViv(raw_pos.length), 0);
 	
 	switch (myhtml_node_namespace(node))
 	{
@@ -179,7 +193,32 @@ HV * sm_get_node_info(myhtml_tree_t *tree, myhtml_tree_node_t *node)
 	
 	hv_store(hash, "namespace_id", 12, newSViv(myhtml_node_namespace(node)), 0);
 	
-	hv_store(hash, "attr", 4, newRV_noinc((SV *)sm_get_node_attr_info(node)), 0);
+	hv_store(hash, "attr", 4, newRV_noinc((SV *)sm_get_node_attr_info( myhtml_node_attribute_first(node) )), 0);
+	
+	return hash;
+}
+
+HV * sm_get_token_node_info(myhtml_tree_t *tree, myhtml_token_node_t *token_node)
+{
+	HV* hash = newHV();
+	SV **ha;
+	
+	size_t length;
+	const char* tag_name = myhtml_tag_name_by_id(tree, myhtml_token_node_tag_id(token_node), &length);
+	
+	myhtml_position_t element_pos = myhtml_token_node_element_pasition(token_node);
+	myhtml_position_t raw_pos = myhtml_token_node_raw_pasition(token_node);
+	
+	ha = hv_store(hash, "tag", 3, newSVpv(tag_name, length), 0);
+	ha = hv_store(hash, "tag_id", 6, newSViv(myhtml_token_node_tag_id(token_node)), 0);
+	
+	ha = hv_store(hash, "element_begin", 13, newSViv(element_pos.begin), 0);
+	ha = hv_store(hash, "element_length", 14, newSViv(element_pos.length), 0);
+	
+	ha = hv_store(hash, "raw_begin", 9, newSViv(raw_pos.begin), 0);
+	ha = hv_store(hash, "raw_length", 10, newSViv(raw_pos.length), 0);
+	
+	hv_store(hash, "attr", 4, newRV_noinc((SV *)sm_get_node_attr_info( myhtml_token_node_attribute_first(token_node) )), 0);
 	
 	return hash;
 }
@@ -253,6 +292,71 @@ SV* sm_get_nodes_by_attribute_value(myhtml_tree_node_t* node, myhtml_tree_t* tre
 	return &PL_sv_undef;
 }
 
+void * myhtml_perl_callback_token_done(myhtml_tree_t* tree, myhtml_token_node_t* token, void* ctx)
+{
+	myhtml_perl_callback_ctx_t *perl_ctx = (myhtml_perl_callback_ctx_t *)ctx;
+	
+	{
+		dSP;
+		
+		ENTER;
+		SAVETMPS;
+		
+		SV *perl_tree = sv_newmortal();
+		sv_setref_pv(perl_tree, "HTML::MyHTML::Tree", (void*)tree);
+		
+		SV *perl_token = sv_newmortal();
+		sv_setref_pv(perl_token, "HTML::MyHTML::Token::Node", (void*)token);
+		
+		PUSHMARK(sp);
+			XPUSHs(perl_tree);
+			XPUSHs(perl_token);
+			
+			if(perl_ctx->ctx) {
+				XPUSHs(perl_ctx->ctx);
+			}
+		PUTBACK;
+		
+		call_sv((SV *)perl_ctx->callback, G_SCALAR);
+		
+		FREETMPS;
+		LEAVE;
+	}
+	
+	return ctx;
+}
+
+void myhtml_perl_callback_node(myhtml_tree_t* tree, myhtml_tree_node_t* node, void* ctx)
+{
+	myhtml_perl_callback_ctx_t *perl_ctx = (myhtml_perl_callback_ctx_t *)ctx;
+	
+	{
+		dSP;
+		
+		ENTER;
+		SAVETMPS;
+		
+		SV *perl_tree = sv_newmortal();
+		sv_setref_pv(perl_tree, "HTML::MyHTML::Tree", (void*)tree);
+		
+		SV *perl_node = sv_newmortal();
+		sv_setref_pv(perl_node, "HTML::MyHTML::Tree::Node", (void*)node);
+		
+		PUSHMARK(sp);
+			XPUSHs(perl_tree);
+			XPUSHs(perl_node);
+			
+			if(perl_ctx->ctx) {
+				XPUSHs(perl_ctx->ctx);
+			}
+		PUTBACK;
+		
+		call_sv((SV *)perl_ctx->callback, G_SCALAR);
+		
+		FREETMPS;
+		LEAVE;
+	}
+}
 
 //####
 //#
@@ -333,6 +437,7 @@ new_tree(myhtml, out_status = &PL_sv_undef)
 INCLUDE: xs/tree.xs
 INCLUDE: xs/tree_node.xs
 INCLUDE: xs/tree_attr.xs
+INCLUDE: xs/token_node.xs
 
 ####
 #
@@ -519,6 +624,7 @@ parse_chunk_end(myhtml, tree)
 	OUTPUT:
 		RETVAL
 
+
 #************************************************************************************
 #
 # MyHTML_TREE
@@ -586,6 +692,20 @@ tree_destroy(tree)
 	HTML::MyHTML::Tree tree;
 	
 	CODE:
+		if(tree) {
+			if(tree->callback_before_token_ctx)
+				free(tree->callback_before_token_ctx);
+			
+			if(tree->callback_after_token_ctx)
+				free(tree->callback_after_token_ctx);
+			
+			if(tree->callback_tree_node_insert_ctx)
+				free(tree->callback_tree_node_insert_ctx);
+			
+			if(tree->callback_tree_node_remove_ctx)
+				free(tree->callback_tree_node_remove_ctx);
+		}
+		
 		RETVAL = myhtml_tree_destroy(tree);
 	OUTPUT:
 		RETVAL
@@ -672,6 +792,145 @@ tree_print_node(tree, node, fh)
 	
 	CODE:
 		myhtml_tree_print_node(tree, node, fh);
+
+void
+callback_before_token_done_set(tree, callback, ctx = &PL_sv_undef)
+	HTML::MyHTML::Tree tree;
+	SV* callback;
+	SV* ctx;
+	
+	CODE:
+		if(SvOK(callback)) {
+			myhtml_perl_callback_ctx_t *perl_ctx;
+			
+			if(tree->callback_before_token_ctx) {
+				perl_ctx = (myhtml_perl_callback_ctx_t*)tree->callback_before_token_ctx;
+			}
+			else {
+				perl_ctx = (myhtml_perl_callback_ctx_t*)calloc(1, sizeof(myhtml_perl_callback_ctx_t));
+			}
+			
+			setbuf(stdout, NULL);
+			
+			if(perl_ctx)
+			{
+				perl_ctx->callback = newSVsv(callback);
+				perl_ctx->ctx = newSVsv(ctx);
+				
+				tree->callback_before_token = myhtml_perl_callback_token_done;
+				tree->callback_before_token_ctx = perl_ctx;
+			}
+		}
+		else {
+			if(tree->callback_before_token_ctx)
+				free(tree->callback_before_token_ctx);
+			
+			tree->callback_before_token = NULL;
+			tree->callback_before_token_ctx = NULL;
+		}
+
+void
+callback_after_token_done_set(tree, callback, ctx = &PL_sv_undef)
+	HTML::MyHTML::Tree tree;
+	SV* callback;
+	SV* ctx;
+	
+	CODE:
+		if(SvOK(callback)) {
+			myhtml_perl_callback_ctx_t *perl_ctx;
+			
+			if(tree->callback_after_token_ctx) {
+				perl_ctx = (myhtml_perl_callback_ctx_t*)tree->callback_after_token_ctx;
+			}
+			else {
+				perl_ctx = (myhtml_perl_callback_ctx_t*)calloc(1, sizeof(myhtml_perl_callback_ctx_t));
+			}
+			
+			if(perl_ctx)
+			{
+				perl_ctx->callback = newSVsv(callback);
+				perl_ctx->ctx = newSVsv(ctx);
+				
+				tree->callback_after_token = myhtml_perl_callback_token_done;
+				tree->callback_after_token_ctx = perl_ctx;
+			}
+		}
+		else {
+			if(tree->callback_after_token_ctx)
+				free(tree->callback_after_token_ctx);
+			
+			tree->callback_after_token = NULL;
+			tree->callback_after_token_ctx = NULL;
+		}
+
+void
+callback_node_insert_set(tree, callback, ctx = &PL_sv_undef)
+	HTML::MyHTML::Tree tree;
+	SV* callback;
+	SV* ctx;
+	
+	CODE:
+		if(SvOK(callback)) {
+			myhtml_perl_callback_ctx_t *perl_ctx;
+			
+			if(tree->callback_tree_node_insert_ctx) {
+				perl_ctx = (myhtml_perl_callback_ctx_t*)tree->callback_tree_node_insert_ctx;
+			}
+			else {
+				perl_ctx = (myhtml_perl_callback_ctx_t*)calloc(1, sizeof(myhtml_perl_callback_ctx_t));
+			}
+			
+			if(perl_ctx)
+			{
+				perl_ctx->callback = newSVsv(callback);
+				perl_ctx->ctx = newSVsv(ctx);
+				
+				tree->callback_tree_node_insert = myhtml_perl_callback_node;
+				tree->callback_tree_node_insert_ctx = perl_ctx;
+			}
+		}
+		else {
+			if(tree->callback_tree_node_insert_ctx)
+				free(tree->callback_tree_node_insert_ctx);
+			
+			tree->callback_tree_node_insert = NULL;
+			tree->callback_tree_node_insert_ctx = NULL;
+		}
+
+void
+callback_node_remove_set(tree, callback, ctx = &PL_sv_undef)
+	HTML::MyHTML::Tree tree;
+	SV* callback;
+	SV* ctx;
+	
+	CODE:
+		if(SvOK(callback)) {
+			myhtml_perl_callback_ctx_t *perl_ctx;
+			
+			if(tree->callback_tree_node_remove_ctx) {
+				perl_ctx = (myhtml_perl_callback_ctx_t*)tree->callback_tree_node_remove_ctx;
+			}
+			else {
+				perl_ctx = (myhtml_perl_callback_ctx_t*)calloc(1, sizeof(myhtml_perl_callback_ctx_t));
+			}
+			
+			if(perl_ctx)
+			{
+				perl_ctx->callback = newSVsv(callback);
+				perl_ctx->ctx = newSVsv(ctx);
+				
+				tree->callback_tree_node_remove = myhtml_perl_callback_node;
+				tree->callback_tree_node_remove_ctx = perl_ctx;
+			}
+		}
+		else {
+			if(tree->callback_tree_node_remove_ctx)
+				free(tree->callback_tree_node_remove_ctx);
+			
+			tree->callback_tree_node_remove = NULL;
+			tree->callback_tree_node_remove_ctx = NULL;
+		}
+
 
 #************************************************************************************
 #

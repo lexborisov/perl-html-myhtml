@@ -401,6 +401,45 @@ Return: array list of elements HTML::MyHTML::Tree::Node
 
 Return: array list of elements HTML::MyHTML::Tree::Node
 
+### callback_before_token_done_set
+
+Set callback for tokens before processing.
+
+Important!!! Only for Perl! Do not use this callback in Thread mode parsing; Build without threads or use methods parse_single, parse_fragment_single, parse_chunk_single, parse_chunk_fragment_single or create myhtml with MyHTML_OPTIONS_PARSE_MODE_SINGLE option; 
+
+```perl
+ $tree->callback_before_token_done_set($sub_callback [, $ctx]);
+```
+
+### callback_after_token_done_set
+
+Set callback for tokens after processing
+
+Important!!! Only for Perl! Do not use this callback in Thread mode parsing; Build without threads or use methods parse_single, parse_fragment_single, parse_chunk_single, parse_chunk_fragment_single or create myhtml with MyHTML_OPTIONS_PARSE_MODE_SINGLE option; 
+
+```perl
+ $tree->callback_after_token_done_set($sub_callback [, $ctx]);
+```
+
+### callback_node_insert_set
+
+Set callback for tree node after inserted
+
+Important!!! Only for Perl! Do not use this callback in Thread mode parsing; Build without threads or use methods parse_single, parse_fragment_single, parse_chunk_single, parse_chunk_fragment_single or create myhtml with MyHTML_OPTIONS_PARSE_MODE_SINGLE option; 
+
+```perl
+ $tree->callback_node_insert_set($sub_callback [, $ctx]);
+```
+
+### callback_node_remove_set
+
+Set callback for tree node after removed
+
+Important!!! Only for Perl! Do not use this callback in Thread mode parsing; Build without threads or use methods parse_single, parse_fragment_single, parse_chunk_single, parse_chunk_fragment_single or create myhtml with MyHTML_OPTIONS_PARSE_MODE_SINGLE option; 
+
+```perl
+ $tree->callback_node_remove_set($sub_callback [, $ctx]);
+```
 
 ## Attributes
 
@@ -563,6 +602,16 @@ Get last child of node
 ```
 
 Return: HTML::MyHTML::Tree::Node if exists, otherwise an UNDEF value
+
+### token
+
+Get token node
+
+```perl
+ my $token_node = $node->token();
+```
+
+Return: HTML::MyHTML::Token::Node if exists, otherwise an UNDEF value
 
 ### get_nodes_by_attribute_key
 
@@ -844,6 +893,95 @@ Print tree of a node. Print including current node
  $node->print_all($tree, $fh);
 ```
 
+## Token Node
+
+### info
+
+Get information of token node: tag name, tag id, attr
+
+```perl
+ my $res = $token_node->info($tree);
+```
+
+Return: hash ref
+
+### tag_id
+
+Get token node tag id
+
+```perl
+ my $tag_id = $token_node->tag_id();
+```
+
+Return: tag_id
+
+### tag_name
+
+Get tag name of a token node
+
+```perl
+ my $res = $token_node->tag_name($tree);
+```
+
+Return: tag name
+
+### is_close_self
+
+Node has self-closing flag?
+
+```perl
+ my $bool = $token_node->is_close_self();
+```
+
+Return: 1 (true) or 0 (false)
+
+### attr_first
+
+Get first attribute of a token node
+
+```perl
+ my $attr = $token_node->attr_first();
+```
+
+Return: HTML::MyHTML::Tree::Attr if exists, otherwise an UNDEF value
+
+### attr_last
+
+Get last attribute of a token node
+
+```perl
+ my $attr = $token_node->attr_last();
+```
+
+Return: HTML::MyHTML::Tree::Attr if exists, otherwise an UNDEF value
+
+### text
+
+Get text of a token node. Only for a MyHTML_TAG__TEXT or MyHTML_TAG__COMMENT tags
+
+```perl
+ my $res = $token_node->text();
+```
+
+Return: text if exists, otherwise an UNDEF value
+
+### string
+
+Get myhtml_string_t object by token node
+
+```perl
+ my $string = $token_node->string();
+```
+
+Return: HTML::MyHTML::String if exists, otherwise an NULL value
+
+### wait_for_done
+
+Wait for process token all parsing stage. Need if you use thread mode
+
+```perl
+ $token_node->wait_for_done();
+```
 
 ## Detect encoding
 

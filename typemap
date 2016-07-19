@@ -11,6 +11,7 @@ myhtml_string_t * T_PTROBJ
 myhtml_tree_attr_t * T_PTROBJ
 myhtml_tag_index_entry_t * T_PTROBJ
 myhtml_tag_index_node_t * T_PTROBJ
+myhtml_token_node_t * T_PTROBJ
 
 myhtml_status_t T_IV
 myhtml_encoding_t T_IV
@@ -33,3 +34,4 @@ HTML::MyHTML::Tag::Index::Node T_PTROBJ
 HTML::MyHTML::Collection T_PTROBJ
 HTML::MyHTML::String T_PTROBJ
 
+HTML::MyHTML::Token::Node T_PTROBJ

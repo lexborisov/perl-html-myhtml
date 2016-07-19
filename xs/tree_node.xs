@@ -103,6 +103,20 @@ last_child(node)
 
 #=sort 6
 
+HTML::MyHTML::Token::Node
+token(node)
+	HTML::MyHTML::Tree::Node node;
+	
+	CODE:
+		RETVAL = myhtml_node_token(node);
+	OUTPUT:
+		RETVAL
+	POSTCALL:
+	  if(RETVAL == NULL)
+		XSRETURN_UNDEF;
+
+#=sort 6
+
 SV*
 get_nodes_by_attribute_key(node, tree, key, out_status = &PL_sv_undef)
 	HTML::MyHTML::Tree::Node node;

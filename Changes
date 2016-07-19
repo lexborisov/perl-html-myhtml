@@ -1,8 +1,10 @@
-1.02	Mon Apr 04 2016 22:21:03 GMT+0300
+1.02
 	Update MyHTML source. up to 1.0.2 - Release version
 	Added method for set tree parse flags myhtml_tree_parse_flags_set
 	Added methods for Node get_nodes_by_attribute_key, get_nodes_by_attribute_value_whitespace_separated, get_nodes_by_attribute_value_begin, get_nodes_by_attribute_value_end, get_nodes_by_attribute_value_contain, get_nodes_by_attribute_value_hyphen_separated, get_nodes_by_tag_id 
-	
+	Added callback methods for Tree: callback_before_token_done_set, callback_after_token_done_set, callback_node_insert_set, callback_node_remove_set
+	Added example for callback: see examples/callback.pl
+	Added Token Node methods
 
 0.35	Mon Apr 04 2016 22:21:03 GMT+0300
 	Fixes for build in NetBSD
