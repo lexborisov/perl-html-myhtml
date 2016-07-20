@@ -1046,6 +1046,122 @@ Now available for detect UTF-8, UTF-16LE, UTF-16BE
 Return: 1 (true) if encoding found, otherwise 0 (false)
 
 
+## Incoming Buffer
+
+### find_by_position
+
+Get Incoming Buffer by position
+
+```perl
+ my $incoming_buffer = $incoming_buffer->find_by_position($begin_position);
+```
+
+Return: HTML::Incoming::Buffer if successful, otherwise a UNDEF value
+
+### data
+
+Get data of Incoming Buffer
+
+```perl
+ my $data = $incoming_buffer->data();
+```
+
+Return: text scalar if successful, otherwise a UNDEF value
+
+### length
+
+Get data length of Incoming Buffer
+
+```perl
+ my $length = $incoming_buffer->length();
+```
+
+Return: scalar length
+
+### size
+
+Get data size of Incoming Buffer
+
+```perl
+ my $size = $incoming_buffer->size();
+```
+
+Return: scalar size
+
+### offset
+
+Get data offset of Incoming Buffer. Global position of begin Incoming Buffer.
+
+```perl
+ my $offset = $incoming_buffer->offset();
+```
+
+Return: scalar offset
+
+### relative_begin
+
+Get Relative Position for Incoming Buffer. Incoming Buffer should be prepared by find_by_position.
+
+```perl
+ my $relative_begin = $incoming_buffer->relative_begin();
+```
+
+Return: scalar relative begin
+
+### available_length
+
+This function returns number of available data by Incoming Buffer. Incoming buffer may be incomplete. See next.
+
+```perl
+ my $available_length = $incoming_buffer->available_length();
+```
+
+Return: scalar available length
+
+### next
+
+Get next buffer
+
+```perl
+ my $next_incoming_buffer = $incoming_buffer->next();
+```
+
+Return: HTML::Incoming::Buffer if exists, otherwise a UNDEF value
+
+### prev
+
+Get prev buffer
+
+```perl
+ my $prev_incoming_buffer = $incoming_buffer->prev();
+```
+
+Return: HTML::Incoming::Buffer if exists, otherwise a UNDEF value
+
+
+## Namespace
+
+### namespace_name_by_id
+
+Get namespace text by namespace type (id)
+
+```perl
+ my $namespace_name = namespace_name_by_id($namespace_id);
+```
+
+Return: text if successful, otherwise a UNDEF value
+
+### namespace_id_by_name
+
+Get namespace type (id) by namespace text
+
+```perl
+ my $namespace_id = namespace_id_by_name($namespace_name);
+```
+
+Return: namespace id
+
+
 # Constants
 
 ## Tags

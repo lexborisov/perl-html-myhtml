@@ -2526,7 +2526,7 @@ void
 myhtml_callback_before_token_done_set(myhtml_tree_t* tree, myhtml_callback_token_f func, void* ctx);
 
 /**
- * Set callback for tokens before processing
+ * Set callback for tokens after processing
  *
  * Warning!
  * If you using thread mode parsing then this callback calls from thread (not Main thread)

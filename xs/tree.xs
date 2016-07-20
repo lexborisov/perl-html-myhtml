@@ -195,4 +195,13 @@ get_elements_by_tag_name(tree, tag_name)
 	OUTPUT:
 		RETVAL
 
+HTML::Incoming::Buffer
+incoming_buffer_first(tree)
+	HTML::MyHTML::Tree tree;
+	
+	CODE:
+		RETVAL = myhtml_tree_incoming_buffer_first(tree);
+	OUTPUT:
+		RETVAL
+
 

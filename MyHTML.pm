@@ -103,6 +103,8 @@ BEGIN {
 		MyHTML_STATUS_MCOBJECT_ERROR_CACHE_REALLOC
 		
 		MyHTML_OPTIONS_DEFAULT MyHTML_OPTIONS_PARSE_MODE_SINGLE MyHTML_OPTIONS_PARSE_MODE_ALL_IN_ONE MyHTML_OPTIONS_PARSE_MODE_SEPARATELY
+		
+		namespace_name_by_id namespace_id_by_name
 	);
 };
 
@@ -500,6 +502,15 @@ Set callback for tree node after removed
 Important!!! Only for Perl! Do not use this callback in Thread mode parsing; Build without threads or use methods parse_single, parse_fragment_single, parse_chunk_single, parse_chunk_fragment_single or create myhtml with MyHTML_OPTIONS_PARSE_MODE_SINGLE option; 
 
  $tree->callback_node_remove_set($sub_callback [, $ctx]);
+
+
+=head3 incoming_buffer_first
+
+Get first Incoming Buffer
+
+ my $incoming_buffer = $tree->incoming_buffer_first();
+
+Return: HTML::Incoming::Buffer if exists, otherwise an UNDEF value
 
 
 =head2 Attributes
@@ -1007,6 +1018,109 @@ Now available for detect UTF-8, UTF-16LE, UTF-16BE
  my $bool = $myhtml->encoding_detect_bom($text, $out_encoding);
 
 Return: 1 (true) if encoding found, otherwise 0 (false)
+
+
+=head2 Incoming Buffer
+
+=head3 find_by_position
+
+Get Incoming Buffer by position
+
+ my $incoming_buffer = $incoming_buffer->find_by_position($begin_position);
+
+Return: HTML::Incoming::Buffer if successful, otherwise a UNDEF value
+
+
+=head3 data
+
+Get data of Incoming Buffer
+
+ my $data = $incoming_buffer->data();
+
+Return: text scalar if successful, otherwise a UNDEF value
+
+
+=head3 length
+
+Get data length of Incoming Buffer
+
+ my $length = $incoming_buffer->length();
+
+Return: scalar length
+
+
+=head3 size
+
+Get data size of Incoming Buffer
+
+ my $size = $incoming_buffer->size();
+
+Return: scalar size
+
+
+=head3 offset
+
+Get data offset of Incoming Buffer. Global position of begin Incoming Buffer.
+
+ my $offset = $incoming_buffer->offset();
+
+Return: scalar offset
+
+
+=head3 relative_begin
+
+Get Relative Position for Incoming Buffer. Incoming Buffer should be prepared by find_by_position.
+
+ my $relative_begin = $incoming_buffer->relative_begin();
+
+Return: scalar relative begin
+
+
+=head3 available_length
+
+This function returns number of available data by Incoming Buffer. Incoming buffer may be incomplete. See next.
+
+ my $available_length = $incoming_buffer->available_length();
+
+Return: scalar available length
+
+
+=head3 next
+
+Get next buffer
+
+ my $next_incoming_buffer = $incoming_buffer->next();
+
+Return: HTML::Incoming::Buffer if exists, otherwise a UNDEF value
+
+
+=head3 prev
+
+Get prev buffer
+
+ my $prev_incoming_buffer = $incoming_buffer->prev();
+
+Return: HTML::Incoming::Buffer if exists, otherwise a UNDEF value
+
+
+=head2 Namespace
+
+=head3 namespace_name_by_id
+
+Get namespace text by namespace type (id)
+
+ my $namespace_name = namespace_name_by_id($namespace_id);
+
+Return: text if successful, otherwise a UNDEF value
+
+
+=head3 namespace_id_by_name
+
+Get namespace type (id) by namespace text
+
+ my $namespace_id = namespace_id_by_name($namespace_name);
+
+Return: namespace id
 
 
 =head1 Constants

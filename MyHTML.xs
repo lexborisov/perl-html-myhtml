@@ -62,6 +62,7 @@ typedef myhtml_tag_index_node_t * HTML__MyHTML__Tag__Index__Node;
 typedef myhtml_collection_t * HTML__MyHTML__Collection;
 typedef myhtml_string_t * HTML__MyHTML__String;
 typedef myhtml_token_node_t * HTML__MyHTML__Token__Node;
+typedef myhtml_incoming_buffer_t * HTML__Incoming__Buffer;
 
 struct myhtml_perl_callback_ctx {
 	SV* callback;
@@ -438,6 +439,7 @@ INCLUDE: xs/tree.xs
 INCLUDE: xs/tree_node.xs
 INCLUDE: xs/tree_attr.xs
 INCLUDE: xs/token_node.xs
+INCLUDE: xs/incoming_buffer.xs
 
 ####
 #
@@ -1737,6 +1739,49 @@ string_length(str)
 
 MODULE = HTML::MyHTML  PACKAGE = HTML::MyHTML
 PROTOTYPES: DISABLE
+
+#************************************************************************************
+#
+# MyHTML_NAMESPACE
+#
+#************************************************************************************
+
+SV*
+namespace_name_by_id(ns)
+	SV* ns;
+	
+	CODE:
+		size_t length = 0;
+		const char *ns_name = myhtml_namespace_name_by_id(SvIV(ns), &length);
+		
+		if(ns_name == NULL || length == 0) {
+			RETVAL = newSVpv("", 0);
+		}
+		else {
+			RETVAL = newSVpv(ns_name, length);
+		}
+	OUTPUT:
+		RETVAL
+
+SV*
+namespace_id_by_name(name)
+	SV* name;
+	
+	PREINIT:
+		STRLEN len;
+	CODE:
+		const char *char_name = NULL;
+		myhtml_namespace_t ns = MyHTML_NAMESPACE_UNDEF;
+		
+		if(SvOK(name)) {
+			char_name = SvPV(name, len);
+			myhtml_namespace_id_by_name(char_name, len, &ns);
+		}
+		
+		RETVAL = newSViv(ns);
+	OUTPUT:
+		RETVAL
+
 
 #************************************************************************************
 #
