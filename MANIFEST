@@ -16,6 +16,7 @@ xs/tree.xs
 xs/tree_attr.xs
 xs/tree_node.xs
 xs/token_node.xs
+xs/incoming_buffer.xs
 
 source/myhtml/api.h
 source/myhtml/api_encoding.h
