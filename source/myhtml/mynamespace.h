@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015-2016 Alexander Borisov
+ Copyright (C) 2015-2017 Alexander Borisov
  
  This library is free software; you can redistribute it and/or
  modify it under the terms of the GNU Lesser General Public
@@ -31,7 +31,7 @@ extern "C" {
 #include <string.h>
 
 #include "myhtml/myosi.h"
-#include "myhtml/utils.h"
+#include "mycore/utils.h"
 
 struct myhtml_namespace_detect_name_entry {
     const char* name;
@@ -44,8 +44,18 @@ struct myhtml_namespace_detect_name_entry {
 }
 typedef myhtml_namespace_detect_name_entry_t;
 
+struct myhtml_namespace_detect_url_entry {
+    const char* url;
+    size_t url_length;
+    
+    myhtml_namespace_t ns;
+}
+typedef myhtml_namespace_detect_url_entry_t;
+
 const char * myhtml_namespace_name_by_id(myhtml_namespace_t ns, size_t *length);
 bool myhtml_namespace_id_by_name(const char *name, size_t length, myhtml_namespace_t *ns);
+const char * myhtml_namespace_url_by_id(myhtml_namespace_t ns, size_t *length);
+myhtml_namespace_t myhtml_namespace_id_by_url(const char *url, size_t length);
 const myhtml_namespace_detect_name_entry_t * myhtml_namespace_name_entry_by_name(const char* name, size_t length);
 
 #ifdef __cplusplus

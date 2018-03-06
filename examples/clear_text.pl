@@ -18,8 +18,7 @@ my $myhtml = HTML::MyHTML->new(MyHTML_OPTIONS_DEFAULT, 1);
 my $tree = $myhtml->new_tree();
 
 # detect encoding
-my $encoding;
-$myhtml->encoding_detect($body, $encoding);
+my $encoding = prescan_stream_to_determine_encoding($body);
 
 # parse
 $myhtml->parse($tree, $encoding, $body);
@@ -36,7 +35,7 @@ sub join_text {
 	my ($myhtml, $tree, $node, $res) = @_;
 	
 	while ($node) {
-		my $info = $node->info($tree);
+		my $info = $node->info();
 		
 		if ($info->{tag_id} == MyHTML_TAG__COMMENT ||
 			$info->{tag_id} == MyHTML_TAG_STYLE ||

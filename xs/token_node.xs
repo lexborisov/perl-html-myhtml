@@ -98,7 +98,7 @@ text(token_node)
 
 #=sort 21
 
-HTML::MyHTML::String
+HTML::MyCORE::String
 string(token_node)
 	HTML::MyHTML::Token::Node token_node;
 	
@@ -110,9 +110,10 @@ string(token_node)
 #=sort 22
 
 void
-wait_for_done(token_node)
+wait_for_done(token, token_node)
+	HTML::MyHTML::Token token
 	HTML::MyHTML::Token::Node token_node;
 	
 	CODE:
-		myhtml_token_node_wait_for_done(token_node);
+		myhtml_token_node_wait_for_done(token, token_node);
 

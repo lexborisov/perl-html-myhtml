@@ -1,5 +1,5 @@
 /*
- Copyright 2015-2016 Alexander Borisov
+ Copyright 2015-2018 Alexander Borisov
  
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -16,39 +16,67 @@
  Author: lex.borisov@gmail.com (Alexander Borisov)
 */
 
+#if (defined(_WIN32) || defined(_WIN64))
+#define MyCORE_OS_WINDOWS_NT
+#endif /* (defined(_WIN32) || defined(_WIN64)) */
+
 #include "EXTERN.h"
 #include "perl.h"
 
+#include "source/mycore/incoming.c"
+#include "source/mycore/myosi.c"
+#include "source/mycore/mystring.c"
+#include "source/mycore/mythread.c"
+#include "source/mycore/thread_queue.c"
+#include "source/mycore/utils/avl_tree.c"
+#include "source/mycore/utils/mchar_async.c"
+#include "source/mycore/utils/mcobject.c"
+#include "source/mycore/utils/mcobject_async.c"
+#include "source/mycore/utils/mcsimple.c"
+#include "source/mycore/utils/mcsync.c"
+#include "source/mycore/utils/mctree.c"
+#include "source/mycore/utils/mhash.c"
+#include "source/mycore/utils.c"
+#include "source/myencoding/detect.c"
+#include "source/myencoding/encoding.c"
+#include "source/myencoding/mystring.c"
 #include "source/myhtml/callback.c"
 #include "source/myhtml/charef.c"
 #include "source/myhtml/data_process.c"
-#include "source/myhtml/encoding.c"
-#include "source/myhtml/encoding_detect.c"
-#include "source/myhtml/incoming.c"
 #include "source/myhtml/myhtml.c"
 #include "source/myhtml/mynamespace.c"
-#include "source/myhtml/myosi.c"
 #include "source/myhtml/mystring.c"
 #include "source/myhtml/parser.c"
-#include "source/myhtml/perf.c"
 #include "source/myhtml/rules.c"
+#include "source/myhtml/serialization.c"
 #include "source/myhtml/stream.c"
 #include "source/myhtml/tag.c"
 #include "source/myhtml/tag_init.c"
-#include "source/myhtml/thread.c"
 #include "source/myhtml/token.c"
 #include "source/myhtml/tokenizer.c"
 #include "source/myhtml/tokenizer_doctype.c"
 #include "source/myhtml/tokenizer_end.c"
 #include "source/myhtml/tokenizer_script.c"
 #include "source/myhtml/tree.c"
-#include "source/myhtml/utils/mchar_async.c"
-#include "source/myhtml/utils/mcobject.c"
-#include "source/myhtml/utils/mcobject_async.c"
-#include "source/myhtml/utils/mcsimple.c"
-#include "source/myhtml/utils/mcsync.c"
-#include "source/myhtml/utils/mctree.c"
-#include "source/myhtml/utils.c"
+
+#ifdef MyCORE_OS_WINDOWS_NT
+
+#include "source/myport/windows_nt/mycore/io.c"
+#include "source/myport/windows_nt/mycore/memory.c"
+#include "source/myport/windows_nt/mycore/perf.c"
+#include "source/myport/windows_nt/mycore/thread.c"
+#include "source/myport/windows_nt/mycore/utils/mcsync.c"
+
+#else
+
+#include "source/myport/posix/mycore/io.c"
+#include "source/myport/posix/mycore/memory.c"
+#include "source/myport/posix/mycore/perf.c"
+#include "source/myport/posix/mycore/thread.c"
+#include "source/myport/posix/mycore/utils/mcsync.c"
+
+#endif /* MyCORE_OS_WINDOWS_NT */
+
 
 #include "XSUB.h"
 
@@ -57,12 +85,11 @@ typedef myhtml_tree_t * HTML__MyHTML__Tree;
 typedef myhtml_tree_node_t * HTML__MyHTML__Tree__Node;
 typedef myhtml_tree_attr_t * HTML__MyHTML__Tree__Attr;
 typedef myhtml_tag_t * HTML__MyHTML__Tag;
-typedef myhtml_tag_index_t * HTML__MyHTML__Tag__Index;
-typedef myhtml_tag_index_node_t * HTML__MyHTML__Tag__Index__Node;
 typedef myhtml_collection_t * HTML__MyHTML__Collection;
-typedef myhtml_string_t * HTML__MyHTML__String;
+typedef myhtml_token_t * HTML__MyHTML__Token;
 typedef myhtml_token_node_t * HTML__MyHTML__Token__Node;
-typedef myhtml_incoming_buffer_t * HTML__Incoming__Buffer;
+typedef mycore_string_t * HTML__MyCORE__String;
+typedef mycore_incoming_buffer_t * HTML__Incoming__Buffer;
 
 struct myhtml_perl_callback_ctx {
 	SV* callback;
@@ -167,8 +194,8 @@ HV * sm_get_node_info(myhtml_tree_t *tree, myhtml_tree_node_t *node)
 	size_t length;
 	const char* tag_name = myhtml_tag_name_by_id(tree, myhtml_node_tag_id(node), &length);
 	
-	myhtml_position_t element_pos = myhtml_node_element_pasition(node);
-	myhtml_position_t raw_pos = myhtml_node_raw_pasition(node);
+	myhtml_position_t element_pos = myhtml_node_element_position(node);
+	myhtml_position_t raw_pos = myhtml_node_raw_position(node);
 	
 	ha = hv_store(hash, "tag", 3, newSVpv(tag_name, length), 0);
 	ha = hv_store(hash, "tag_id", 6, newSViv(myhtml_node_tag_id(node)), 0);
@@ -207,8 +234,8 @@ HV * sm_get_token_node_info(myhtml_tree_t *tree, myhtml_token_node_t *token_node
 	size_t length;
 	const char* tag_name = myhtml_tag_name_by_id(tree, myhtml_token_node_tag_id(token_node), &length);
 	
-	myhtml_position_t element_pos = myhtml_token_node_element_pasition(token_node);
-	myhtml_position_t raw_pos = myhtml_token_node_raw_pasition(token_node);
+	myhtml_position_t element_pos = myhtml_token_node_element_position(token_node);
+	myhtml_position_t raw_pos = myhtml_token_node_raw_position(token_node);
 	
 	ha = hv_store(hash, "tag", 3, newSVpv(tag_name, length), 0);
 	ha = hv_store(hash, "tag_id", 6, newSViv(myhtml_token_node_tag_id(token_node)), 0);
@@ -228,18 +255,20 @@ AV * sm_get_elements_by_tag_id(myhtml_tree_t *tree, myhtml_tag_id_t tag_id)
 {
 	AV* array_list = newAV();
 	
-	myhtml_tag_index_t* tag_index = myhtml_tree_get_tag_index(tree);
-	myhtml_tag_index_node_t* index_node = myhtml_tag_index_first(tag_index, tag_id);
-	
-	while (index_node) {
-		SV* node = newSV(0);
-		sv_setref_pv(node, "HTML::MyHTML::Tree::Node", myhtml_tag_index_tree_node(index_node));
-		
-		av_push(array_list, node);
-		
-		index_node = myhtml_tag_index_next(index_node);
+    myhtml_collection_t *collection = myhtml_get_nodes_by_tag_id(tree, NULL, tag_id, NULL);
+    
+	if (collection == NULL) {
+		return array_list;
 	}
+
+    for (size_t i = 0; i < collection->length; i++) {
+		SV* node = newSV(0);
+		sv_setref_pv(node, "HTML::MyHTML::Tree::Node", collection->list[i]);
+		av_push(array_list, node);
+    }
 	
+	myhtml_collection_destroy(collection);
+
 	return array_list;
 }
 
@@ -357,6 +386,12 @@ void myhtml_perl_callback_node(myhtml_tree_t* tree, myhtml_tree_node_t* node, vo
 		FREETMPS;
 		LEAVE;
 	}
+}
+
+mystatus_t myhtml_perl_tree_node_callback_print(const char *buffer, size_t size, void *ctx)
+{
+	fprintf((FILE *) ctx, "%.*s", (int) size, buffer);
+	return MyCORE_STATUS_OK;
 }
 
 //####
@@ -485,18 +520,17 @@ clean(myhtml)
 		myhtml_clean(myhtml);
 
 void
-DESTROY(myhtml)
+destroy(myhtml)
 	HTML::MyHTML myhtml;
-	
+
 	CODE:
-		if(myhtml)
-			myhtml_destroy(myhtml);
+		myhtml_destroy(myhtml);
 
 myhtml_status_t
 parse(myhtml, tree, encoding, html)
 	HTML::MyHTML myhtml;
 	HTML::MyHTML::Tree tree;
-	myhtml_encoding_t encoding;
+	myencoding_t encoding;
 	SV* html;
 	
 	PREINIT:
@@ -511,7 +545,7 @@ myhtml_status_t
 parse_fragment(myhtml, tree, encoding, html, tag_id, my_namespace)
 	HTML::MyHTML myhtml;
 	HTML::MyHTML::Tree tree;
-	myhtml_encoding_t encoding;
+	myencoding_t encoding;
 	SV* html;
 	myhtml_tag_id_t tag_id;
 	enum myhtml_namespace my_namespace;
@@ -528,7 +562,7 @@ myhtml_status_t
 parse_single(myhtml, tree, encoding, html)
 	HTML::MyHTML myhtml;
 	HTML::MyHTML::Tree tree;
-	myhtml_encoding_t encoding;
+	myencoding_t encoding;
 	SV* html;
 	
 	PREINIT:
@@ -543,7 +577,7 @@ myhtml_status_t
 parse_fragment_single(myhtml, tree, encoding, html, tag_id, my_namespace)
 	HTML::MyHTML myhtml;
 	HTML::MyHTML::Tree tree;
-	myhtml_encoding_t encoding;
+	myencoding_t encoding;
 	SV* html;
 	myhtml_tag_id_t tag_id;
 	enum myhtml_namespace my_namespace;
@@ -663,31 +697,28 @@ tree_clean(tree)
 		myhtml_tree_clean(tree);
 
 void
-tree_node_add_child(tree, root, node)
-	HTML::MyHTML::Tree tree;
+tree_node_add_child(root, node)
 	HTML::MyHTML::Tree::Node root;
 	HTML::MyHTML::Tree::Node node;
 	
 	CODE:
-		myhtml_tree_node_add_child(tree, root, node);
+		myhtml_tree_node_add_child(root, node);
 
 void
-tree_node_insert_before(tree, root, node)
-	HTML::MyHTML::Tree tree;
+tree_node_insert_before(root, node)
 	HTML::MyHTML::Tree::Node root;
 	HTML::MyHTML::Tree::Node node;
 	
 	CODE:
-		myhtml_tree_node_insert_before(tree, root, node);
+		myhtml_tree_node_insert_before(root, node);
 
 void
-tree_node_insert_after(tree, root, node)
-	HTML::MyHTML::Tree tree;
+tree_node_insert_after(root, node)
 	HTML::MyHTML::Tree::Node root;
 	HTML::MyHTML::Tree::Node node;
 	
 	CODE:
-		myhtml_tree_node_insert_after(tree, root, node);
+		myhtml_tree_node_insert_after(root, node);
 
 HTML::MyHTML::Tree
 tree_destroy(tree)
@@ -730,15 +761,6 @@ tree_get_tag(tree)
 	OUTPUT:
 		RETVAL
 
-HTML::MyHTML::Tag::Index
-tree_get_tag_index(tree)
-	HTML::MyHTML::Tree tree;
-	
-	CODE:
-		RETVAL = myhtml_tree_get_tag_index(tree);
-	OUTPUT:
-		RETVAL
-
 HTML::MyHTML::Tree::Node
 tree_get_document(tree)
 	HTML::MyHTML::Tree tree;
@@ -765,35 +787,6 @@ tree_get_mchar_node_id(tree)
 		RETVAL = myhtml_tree_get_mchar_node_id(tree);
 	OUTPUT:
 		RETVAL
-
-void
-tree_print_by_node(tree, node, fh, inc)
-	HTML::MyHTML::Tree tree;
-	HTML::MyHTML::Tree::Node node;
-	FILE* fh;
-	size_t inc;
-	
-	CODE:
-		myhtml_tree_print_by_node(tree, node, fh, inc);
-
-void
-tree_print_node_childs(tree, node, fh, inc)
-	HTML::MyHTML::Tree tree;
-	HTML::MyHTML::Tree::Node node;
-	FILE* fh;
-	size_t inc;
-	
-	CODE:
-		myhtml_tree_print_node_children(tree, node, fh, inc);
-
-void
-tree_print_node(tree, node, fh)
-	HTML::MyHTML::Tree tree;
-	HTML::MyHTML::Tree::Node node;
-	FILE* fh;
-	
-	CODE:
-		myhtml_tree_print_node(tree, node, fh);
 
 void
 callback_before_token_done_set(tree, callback, ctx = &PL_sv_undef)
@@ -1045,23 +1038,21 @@ node_create(tree, tag_id, my_namespace)
 		RETVAL
 
 void
-node_free(tree, node)
-	HTML::MyHTML::Tree tree;
+node_free(node)
 	HTML::MyHTML::Tree::Node node;
 	
 	CODE:
-		myhtml_node_free(tree, node);
+		myhtml_node_free(node);
 
 MODULE = HTML::MyHTML::Tree::Node  PACKAGE = HTML::MyHTML::Tree::Node
 PROTOTYPES: DISABLE
 
 HTML::MyHTML::Tree::Node
-node_remove(tree, node)
-	HTML::MyHTML::Tree tree;
+node_remove(node)
 	HTML::MyHTML::Tree::Node node;
 	
 	CODE:
-		RETVAL = myhtml_node_remove(tree, node);
+		RETVAL = myhtml_node_remove(node);
 	OUTPUT:
 		RETVAL
 
@@ -1069,92 +1060,84 @@ MODULE = HTML::MyHTML::Tree  PACKAGE = HTML::MyHTML::Tree
 PROTOTYPES: DISABLE
 
 void
-node_delete(tree, node)
-	HTML::MyHTML::Tree tree;
+node_delete(node)
 	HTML::MyHTML::Tree::Node node;
 	
 	CODE:
-		myhtml_node_delete(tree, node);
+		myhtml_node_delete(node);
 
 void
-node_delete_recursive(tree, node)
-	HTML::MyHTML::Tree tree;
+node_delete_recursive(node)
 	HTML::MyHTML::Tree::Node node;
 	
 	CODE:
-		myhtml_node_delete_recursive(tree, node);
+		myhtml_node_delete_recursive(node);
 
 HTML::MyHTML::Tree::Node
-node_insert_to_appropriate_place(tree, target, node)
-	HTML::MyHTML::Tree tree;
+node_insert_to_appropriate_place(target, node)
 	HTML::MyHTML::Tree::Node target;
 	HTML::MyHTML::Tree::Node node;
 	
 	CODE:
-		RETVAL = myhtml_node_insert_to_appropriate_place(tree, target, node);
+		RETVAL = myhtml_node_insert_to_appropriate_place(target, node);
 	OUTPUT:
 		RETVAL
 
 HTML::MyHTML::Tree::Node
-node_insert_append_child(tree, target, node)
-	HTML::MyHTML::Tree tree;
+node_insert_append_child(target, node)
 	HTML::MyHTML::Tree::Node target;
 	HTML::MyHTML::Tree::Node node;
 	
 	CODE:
-		RETVAL = myhtml_node_append_child(tree, target, node);
+		RETVAL = myhtml_node_append_child(target, node);
 	OUTPUT:
 		RETVAL
 
 HTML::MyHTML::Tree::Node
-node_insert_after(tree, target, node)
-	HTML::MyHTML::Tree tree;
+node_insert_after(target, node)
 	HTML::MyHTML::Tree::Node target;
 	HTML::MyHTML::Tree::Node node;
 	
 	CODE:
-		RETVAL = myhtml_node_insert_after(tree, target, node);
+		RETVAL = myhtml_node_insert_after(target, node);
 	OUTPUT:
 		RETVAL
 
 HTML::MyHTML::Tree::Node
-node_insert_before(tree, target, node)
-	HTML::MyHTML::Tree tree;
+node_insert_before(target, node)
 	HTML::MyHTML::Tree::Node target;
 	HTML::MyHTML::Tree::Node node;
 	
 	CODE:
-		RETVAL = myhtml_node_insert_before(tree, target, node);
+		RETVAL = myhtml_node_insert_before(target, node);
 	OUTPUT:
 		RETVAL
 
-HTML::MyHTML::String
-node_text_set(tree, node, text, encoding)
-	HTML::MyHTML::Tree tree;
+HTML::MyCORE::String
+node_text_set(node, text, encoding)
 	HTML::MyHTML::Tree::Node node;
 	SV* text;
-	myhtml_encoding_t encoding;
+	myencoding_t encoding;
 	
 	PREINIT:
 		STRLEN len;
 	CODE:
 		const char *char_text = SvPV(text, len);
-		RETVAL = myhtml_node_text_set(tree, node, char_text, len, encoding);
+		RETVAL = myhtml_node_text_set(node, char_text, len, encoding);
 	OUTPUT:
 		RETVAL
 
-HTML::MyHTML::String
-node_text_set_with_charef(tree, node, text, encoding)
-	HTML::MyHTML::Tree tree;
+HTML::MyCORE::String
+node_text_set_with_charef(node, text, encoding)
 	HTML::MyHTML::Tree::Node node;
 	SV* text;
-	myhtml_encoding_t encoding;
+	myencoding_t encoding;
 	
 	PREINIT:
 		STRLEN len;
 	CODE:
 		const char *char_text = SvPV(text, len);
-		RETVAL = myhtml_node_text_set_with_charef(tree, node, char_text, len, encoding);
+		RETVAL = myhtml_node_text_set_with_charef(node, char_text, len, encoding);
 	OUTPUT:
 		RETVAL
 
@@ -1235,7 +1218,7 @@ node_text(node)
 	OUTPUT:
 		RETVAL
 
-HTML::MyHTML::String
+HTML::MyCORE::String
 node_string(node)
 	HTML::MyHTML::Tree::Node node;
 	
@@ -1322,12 +1305,11 @@ MODULE = HTML::MyHTML::Tree  PACKAGE = HTML::MyHTML::Tree
 PROTOTYPES: DISABLE
 
 HTML::MyHTML::Tree::Attr
-attribute_add(tree, node, key, value, encoding)
-	HTML::MyHTML::Tree tree;
+attribute_add(node, key, value, encoding)
 	HTML::MyHTML::Tree::Node node;
 	SV* key;
 	SV* value;
-	myhtml_encoding_t encoding;
+	myencoding_t encoding;
 	
 	PREINIT:
 		STRLEN key_len;
@@ -1336,7 +1318,7 @@ attribute_add(tree, node, key, value, encoding)
 		const char *char_key   = SvPV(key, key_len);
 		const char *char_value = SvPV(key, value_len);
 		
-		RETVAL = myhtml_attribute_add(tree, node, char_key, key_len, char_value, value_len, encoding);
+		RETVAL = myhtml_attribute_add(node, char_key, key_len, char_value, value_len, encoding);
 	OUTPUT:
 		RETVAL
 
@@ -1386,137 +1368,6 @@ attribute_free(tree, attr)
 	CODE:
 		myhtml_attribute_free(tree, attr);
 
-#************************************************************************************
-#
-# MyHTML_TAG_INDEX
-#
-#************************************************************************************
-
-MODULE = HTML::MyHTML::Tag  PACKAGE = HTML::MyHTML::Tag
-PROTOTYPES: DISABLE
-
-HTML::MyHTML::Tag::Index
-tag_index_create(void)
-	
-	CODE:
-		RETVAL = myhtml_tag_index_create();
-	OUTPUT:
-		RETVAL
-
-myhtml_status_t
-tag_index_init(tag, tag_index)
-	HTML::MyHTML::Tag tag;
-	HTML::MyHTML::Tag::Index tag_index;
-	
-	CODE:
-		RETVAL = myhtml_tag_index_init(tag, tag_index);
-	OUTPUT:
-		RETVAL
-
-void
-tag_index_clean(tag, tag_index)
-	HTML::MyHTML::Tag tag;
-	HTML::MyHTML::Tag::Index tag_index;
-	
-	CODE:
-		myhtml_tag_index_clean(tag, tag_index);
-
-HTML::MyHTML::Tag::Index
-tag_index_destroy(tag, tag_index)
-	HTML::MyHTML::Tag tag;
-	HTML::MyHTML::Tag::Index tag_index;
-	
-	CODE:
-		RETVAL = myhtml_tag_index_destroy(tag, tag_index);
-	OUTPUT:
-		RETVAL
-
-myhtml_status_t
-tag_index_add(tag, tag_index, node)
-	HTML::MyHTML::Tag tag;
-	HTML::MyHTML::Tag::Index tag_index;
-	HTML::MyHTML::Tree::Node node;
-	
-	CODE:
-		RETVAL = myhtml_tag_index_add(tag, tag_index, node);
-	OUTPUT:
-		RETVAL
-
-MODULE = HTML::MyHTML::Tag::Index  PACKAGE = HTML::MyHTML::Tag::Index
-PROTOTYPES: DISABLE
-
-myhtml_tag_index_entry_t*
-tag_index_entry(tag_index, tag_id)
-	HTML::MyHTML::Tag::Index tag_index;
-	myhtml_tag_id_t tag_id;
-	
-	CODE:
-		RETVAL = myhtml_tag_index_entry(tag_index, tag_id);
-	OUTPUT:
-		RETVAL
-
-HTML::MyHTML::Tag::Index::Node
-tag_index_first(tag_index, tag_id)
-	HTML::MyHTML::Tag::Index tag_index;
-	myhtml_tag_id_t tag_id;
-	
-	CODE:
-		RETVAL = myhtml_tag_index_first(tag_index, tag_id);
-	OUTPUT:
-		RETVAL
-
-HTML::MyHTML::Tag::Index::Node
-tag_index_last(tag_index, tag_id)
-	HTML::MyHTML::Tag::Index tag_index;
-	myhtml_tag_id_t tag_id;
-	
-	CODE:
-		RETVAL = myhtml_tag_index_last(tag_index, tag_id);
-	OUTPUT:
-		RETVAL
-
-MODULE = HTML::MyHTML::Tag::Index::Node  PACKAGE = HTML::MyHTML::Tag::Index::Node
-PROTOTYPES: DISABLE
-
-HTML::MyHTML::Tag::Index::Node
-tag_index_next(tag_index_node)
-	HTML::MyHTML::Tag::Index::Node tag_index_node;
-	
-	CODE:
-		RETVAL = myhtml_tag_index_next(tag_index_node);
-	OUTPUT:
-		RETVAL
-
-HTML::MyHTML::Tag::Index::Node
-tag_index_prev(tag_index_node)
-	HTML::MyHTML::Tag::Index::Node tag_index_node;
-	
-	CODE:
-		RETVAL = myhtml_tag_index_prev(tag_index_node);
-	OUTPUT:
-		RETVAL
-
-HTML::MyHTML::Tree::Node
-tag_index_tree_node(index_node)
-	myhtml_tag_index_node_t *index_node;
-	
-	CODE:
-		RETVAL = myhtml_tag_index_tree_node(index_node);
-	OUTPUT:
-		RETVAL
-
-MODULE = HTML::MyHTML::Tag::Index  PACKAGE = HTML::MyHTML::Tag::Index
-PROTOTYPES: DISABLE
-
-size_t
-tag_index_entry_count(tag_index, tag_id)
-	HTML::MyHTML::Tag::Index tag_index;
-	myhtml_tag_id_t tag_id;
-	
-	CODE:
-		RETVAL = myhtml_tag_index_entry_count(tag_index, tag_id);
-	OUTPUT:
-		RETVAL
 
 #************************************************************************************
 #
@@ -1582,12 +1433,12 @@ PROTOTYPES: DISABLE
 void
 encoding_set(tree, encoding)
 	HTML::MyHTML::Tree tree;
-	myhtml_encoding_t encoding;
+	myencoding_t encoding;
 	
 	CODE:
 		myhtml_encoding_set(tree, encoding);
 
-myhtml_encoding_t
+myencoding_t
 encoding_get(tree)
 	HTML::MyHTML::Tree tree;
 	
@@ -1610,7 +1461,7 @@ encoding_codepoint_to_ascii_utf_8(myhtml, codepoint)
 		SV* todata = newSVpv("\0\0\0\0", 4);
 		char* char_todata = SvPV(todata, len);
 		
-		size_t len_of = myhtml_encoding_codepoint_to_ascii_utf_8(SvIV(codepoint), char_todata);
+		size_t len_of = myencoding_codepoint_to_ascii_utf_8(SvIV(codepoint), char_todata);
 		sv_setpvn(todata, char_todata, len_of);
 		
 		RETVAL = todata;
@@ -1628,10 +1479,30 @@ encoding_codepoint_to_ascii_utf_16(myhtml, codepoint)
 		SV* todata = newSVpv("\0\0\0\0", 4);
 		char* char_todata = SvPV(todata, len);
 		
-		size_t len_of = myhtml_encoding_codepoint_to_ascii_utf_16(SvIV(codepoint), char_todata);
+		size_t len_of = myencoding_codepoint_to_ascii_utf_16(SvIV(codepoint), char_todata);
 		sv_setpvn(todata, char_todata, len_of);
 		
 		RETVAL = todata;
+	OUTPUT:
+		RETVAL
+
+myencoding_t
+prescan_stream_to_determine_encoding(text, len = &PL_sv_undef)
+	SV* text;
+	SV* len;
+	
+	PREINIT:
+		STRLEN text_len;
+	CODE:
+		char* char_todata = SvPV(text, text_len);
+		
+		if (SvOK(len)) {
+			if (SvIV(len) <= text_len) {
+				text_len = SvIV(len);
+			}
+		}
+		
+		RETVAL = myencoding_prescan_stream_to_determine_encoding(char_todata, text_len);
 	OUTPUT:
 		RETVAL
 
@@ -1645,9 +1516,9 @@ encoding_detect(myhtml, text, out_encoding)
 		STRLEN text_len;
 	CODE:
 		char* char_todata = SvPV(text, text_len);
-		myhtml_encoding_t encoding;
+		myencoding_t encoding;
 		
-		RETVAL = myhtml_encoding_detect(char_todata, text_len, &encoding);
+		RETVAL = myencoding_detect(char_todata, text_len, &encoding);
 		
 		sv_setiv(out_encoding, encoding);
 	OUTPUT:
@@ -1663,9 +1534,9 @@ encoding_detect_russian(myhtml, text, out_encoding)
 		STRLEN text_len;
 	CODE:
 		char* char_todata = SvPV(text, text_len);
-		myhtml_encoding_t encoding;
+		myencoding_t encoding;
 		
-		RETVAL = myhtml_encoding_detect_russian(char_todata, text_len, &encoding);
+		RETVAL = myencoding_detect_russian(char_todata, text_len, &encoding);
 		
 		sv_setiv(out_encoding, encoding);
 	OUTPUT:
@@ -1681,9 +1552,9 @@ encoding_detect_unicode(myhtml, text, out_encoding)
 		STRLEN text_len;
 	CODE:
 		char* char_todata = SvPV(text, text_len);
-		myhtml_encoding_t encoding;
+		myencoding_t encoding;
 		
-		RETVAL = myhtml_encoding_detect_unicode(char_todata, text_len, &encoding);
+		RETVAL = myencoding_detect_unicode(char_todata, text_len, &encoding);
 		
 		sv_setiv(out_encoding, encoding);
 	OUTPUT:
@@ -1699,9 +1570,9 @@ encoding_detect_bom(myhtml, text, out_encoding)
 		STRLEN text_len;
 	CODE:
 		char* char_todata = SvPV(text, text_len);
-		myhtml_encoding_t encoding;
+		myencoding_t encoding;
 		
-		RETVAL = myhtml_encoding_detect_bom(char_todata, text_len, &encoding);
+		RETVAL = myencoding_detect_bom(char_todata, text_len, &encoding);
 		
 		sv_setiv(out_encoding, encoding);
 	OUTPUT:
@@ -1713,16 +1584,16 @@ encoding_detect_bom(myhtml, text, out_encoding)
 #
 #************************************************************************************
 
-MODULE = HTML::MyHTML::String  PACKAGE = HTML::MyHTML::String
+MODULE = HTML::MyCORE::String  PACKAGE = HTML::MyCORE::String
 PROTOTYPES: DISABLE
 
 SV*
 string_data(str)
-	myhtml_string_t *str;
+	mycore_string_t *str;
 	
 	CODE:
-		char* char_str = myhtml_string_data(str);
-		size_t len = myhtml_string_length(str);
+		char* char_str = mycore_string_data(str);
+		size_t len = mycore_string_length(str);
 		
 		RETVAL = newSVpv(char_str, len);
 	OUTPUT:
@@ -1730,10 +1601,10 @@ string_data(str)
 
 SV*
 string_length(str)
-	myhtml_string_t *str;
+	mycore_string_t *str;
 	
 	CODE:
-		RETVAL = newSViv( myhtml_string_length(str) );
+		RETVAL = newSViv( mycore_string_length(str) );
 	OUTPUT:
 		RETVAL
 
@@ -1827,14 +1698,257 @@ MyHTML_TREE_PARSE_FLAGS_WITHOUT_DOCTYPE_IN_TREE()
 
 #************************************************************************************
 #
+# MyCORE_STATUS constants
+#
+#************************************************************************************
+SV*
+MyCORE_STATUS_OK()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_OK );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_ERROR()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_ERROR );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_ERROR_MEMORY_ALLOCATION()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_ERROR_MEMORY_ALLOCATION );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_MEMORY_ALLOCATION()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_MEMORY_ALLOCATION );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_LIST_INIT()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_LIST_INIT );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_ATTR_MALLOC()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_ATTR_MALLOC );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_ATTR_INIT()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_ATTR_INIT );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_ATTR_SET()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_ATTR_SET );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_ATTR_DESTROY()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_ATTR_DESTROY );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_NO_SLOTS()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_NO_SLOTS );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_BATCH_INIT()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_BATCH_INIT );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_WORKER_MALLOC()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_WORKER_MALLOC );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_WORKER_SEM_CREATE()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_WORKER_SEM_CREATE );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_WORKER_THREAD_CREATE()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_WORKER_THREAD_CREATE );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_MASTER_THREAD_CREATE()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_MASTER_THREAD_CREATE );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_SEM_PREFIX_MALLOC()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_SEM_PREFIX_MALLOC );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_SEM_CREATE()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_SEM_CREATE );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_QUEUE_MALLOC()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_QUEUE_MALLOC );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_QUEUE_NODES_MALLOC()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_QUEUE_NODES_MALLOC );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_QUEUE_NODE_MALLOC()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_QUEUE_NODE_MALLOC );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_MUTEX_MALLOC()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_MUTEX_MALLOC );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_MUTEX_INIT()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_MUTEX_INIT );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_MUTEX_LOCK()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_MUTEX_LOCK );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_THREAD_ERROR_MUTEX_UNLOCK()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_THREAD_ERROR_MUTEX_UNLOCK );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_PERF_ERROR_COMPILED_WITHOUT_PERF()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_PERF_ERROR_COMPILED_WITHOUT_PERF );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_PERF_ERROR_FIND_CPU_CLOCK()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_PERF_ERROR_FIND_CPU_CLOCK );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_MCOBJECT_ERROR_CACHE_CREATE()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_MCOBJECT_ERROR_CACHE_CREATE );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_MCOBJECT_ERROR_CHUNK_CREATE()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_MCOBJECT_ERROR_CHUNK_CREATE );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_MCOBJECT_ERROR_CHUNK_INIT()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_MCOBJECT_ERROR_CHUNK_INIT );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_MCOBJECT_ERROR_CACHE_REALLOC()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_MCOBJECT_ERROR_CACHE_REALLOC );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_ASYNC_ERROR_LOCK()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_ASYNC_ERROR_LOCK );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_ASYNC_ERROR_UNLOCK()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_ASYNC_ERROR_UNLOCK );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyCORE_STATUS_ERROR_NO_FREE_SLOT()
+	CODE:
+		RETVAL = newSViv( MyCORE_STATUS_ERROR_NO_FREE_SLOT );
+	OUTPUT:
+		RETVAL
+
+
+#************************************************************************************
+#
 # MyHTML_STATUS constants
 #
 #************************************************************************************
-
 SV*
 MyHTML_STATUS_OK()
 	CODE:
 		RETVAL = newSViv( MyHTML_STATUS_OK );
+	OUTPUT:
+		RETVAL
+
+SV*
+MyHTML_STATUS_ERROR()
+	CODE:
+		RETVAL = newSViv( MyHTML_STATUS_ERROR );
 	OUTPUT:
 		RETVAL
 
@@ -1846,170 +1960,9 @@ MyHTML_STATUS_ERROR_MEMORY_ALLOCATION()
 		RETVAL
 
 SV*
-MyHTML_STATUS_THREAD_ERROR_MEMORY_ALLOCATION()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_MEMORY_ALLOCATION );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_LIST_INIT()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_LIST_INIT );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_ATTR_MALLOC()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_ATTR_MALLOC );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_ATTR_INIT()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_ATTR_INIT );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_ATTR_SET()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_ATTR_SET );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_ATTR_DESTROY()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_ATTR_DESTROY );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_NO_SLOTS()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_NO_SLOTS );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_BATCH_INIT()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_BATCH_INIT );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_WORKER_MALLOC()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_WORKER_MALLOC );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_WORKER_SEM_CREATE()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_WORKER_SEM_CREATE );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_WORKER_THREAD_CREATE()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_WORKER_THREAD_CREATE );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_MASTER_THREAD_CREATE()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_MASTER_THREAD_CREATE );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_SEM_PREFIX_MALLOC()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_SEM_PREFIX_MALLOC );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_SEM_CREATE()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_SEM_CREATE );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_QUEUE_MALLOC()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_QUEUE_MALLOC );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_QUEUE_NODES_MALLOC()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_QUEUE_NODES_MALLOC );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_QUEUE_NODE_MALLOC()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_QUEUE_NODE_MALLOC );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_MUTEX_MALLOC()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_MUTEX_MALLOC );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_MUTEX_INIT()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_MUTEX_INIT );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_MUTEX_LOCK()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_MUTEX_LOCK );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_THREAD_ERROR_MUTEX_UNLOCK()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_THREAD_ERROR_MUTEX_UNLOCK );
-	OUTPUT:
-		RETVAL
-
-SV*
 MyHTML_STATUS_RULES_ERROR_MEMORY_ALLOCATION()
 	CODE:
 		RETVAL = newSViv( MyHTML_STATUS_RULES_ERROR_MEMORY_ALLOCATION );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_PERF_ERROR_COMPILED_WITHOUT_PERF()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_PERF_ERROR_COMPILED_WITHOUT_PERF );
-	OUTPUT:
-		RETVAL
-
-SV*
-MyHTML_STATUS_PERF_ERROR_FIND_CPU_CLOCK()
-	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_PERF_ERROR_FIND_CPU_CLOCK );
 	OUTPUT:
 		RETVAL
 
@@ -2153,31 +2106,37 @@ MyHTML_STATUS_STREAM_BUFFER_ERROR_ADD_ENTRY()
 	OUTPUT:
 		RETVAL
 
+
+#************************************************************************************
+#
+# MyENCODING_STATUS constants
+#
+#************************************************************************************
 SV*
-MyHTML_STATUS_MCOBJECT_ERROR_CACHE_CREATE()
+MyENCODING_STATUS_OK()
 	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_MCOBJECT_ERROR_CACHE_CREATE );
+		RETVAL = newSViv( MyENCODING_STATUS_OK );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_STATUS_MCOBJECT_ERROR_CHUNK_CREATE()
+MyENCODING_STATUS_ERROR()
 	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_MCOBJECT_ERROR_CHUNK_CREATE );
+		RETVAL = newSViv( MyENCODING_STATUS_ERROR );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_STATUS_MCOBJECT_ERROR_CHUNK_INIT()
+MyENCODING_STATUS_CONTINUE()
 	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_MCOBJECT_ERROR_CHUNK_INIT );
+		RETVAL = newSViv( MyENCODING_STATUS_CONTINUE );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_STATUS_MCOBJECT_ERROR_CACHE_REALLOC()
+MyENCODING_STATUS_DONE()
 	CODE:
-		RETVAL = newSViv( MyHTML_STATUS_MCOBJECT_ERROR_CACHE_REALLOC );
+		RETVAL = newSViv( MyENCODING_STATUS_DONE );
 	OUTPUT:
 		RETVAL
 
@@ -2284,7 +2243,6 @@ MyHTML_NAMESPACE_LAST_ENTRY()
 # MyHTML_TAG constants
 #
 #************************************************************************************
-
 SV*
 MyHTML_TAG__UNDEF()
 	CODE:
@@ -4063,295 +4021,302 @@ MyHTML_TAG_LAST_ENTRY()
 	OUTPUT:
 		RETVAL
 
+
 #************************************************************************************
 #
 # MyHTML constants
 #
 #************************************************************************************
 SV*
-MyHTML_ENCODING_DEFAULT()
+MyENCODING_DEFAULT()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_DEFAULT );
+		RETVAL = newSViv( MyENCODING_DEFAULT );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_UTF_8()
+MyENCODING_NOT_DETERMINED()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_UTF_8 );
+		RETVAL = newSViv( MyENCODING_NOT_DETERMINED );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_UTF_16LE()
+MyENCODING_UTF_8()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_UTF_16LE );
+		RETVAL = newSViv( MyENCODING_UTF_8 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_UTF_16BE()
+MyENCODING_UTF_16LE()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_UTF_16BE );
+		RETVAL = newSViv( MyENCODING_UTF_16LE );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_X_USER_DEFINED()
+MyENCODING_UTF_16BE()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_X_USER_DEFINED );
+		RETVAL = newSViv( MyENCODING_UTF_16BE );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_BIG5()
+MyENCODING_X_USER_DEFINED()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_BIG5 );
+		RETVAL = newSViv( MyENCODING_X_USER_DEFINED );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_EUC_KR()
+MyENCODING_BIG5()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_EUC_KR );
+		RETVAL = newSViv( MyENCODING_BIG5 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_GB18030()
+MyENCODING_EUC_JP()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_GB18030 );
+		RETVAL = newSViv( MyENCODING_EUC_JP );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_IBM866()
+MyENCODING_EUC_KR()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_IBM866 );
+		RETVAL = newSViv( MyENCODING_EUC_KR );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_ISO_8859_10()
+MyENCODING_GB18030()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_ISO_8859_10 );
+		RETVAL = newSViv( MyENCODING_GB18030 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_ISO_8859_13()
+MyENCODING_GBK()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_ISO_8859_13 );
+		RETVAL = newSViv( MyENCODING_GBK );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_ISO_8859_14()
+MyENCODING_IBM866()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_ISO_8859_14 );
+		RETVAL = newSViv( MyENCODING_IBM866 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_ISO_8859_15()
+MyENCODING_ISO_2022_JP()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_ISO_8859_15 );
+		RETVAL = newSViv( MyENCODING_ISO_2022_JP );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_ISO_8859_16()
+MyENCODING_ISO_8859_10()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_ISO_8859_16 );
+		RETVAL = newSViv( MyENCODING_ISO_8859_10 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_ISO_8859_2()
+MyENCODING_ISO_8859_13()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_ISO_8859_2 );
+		RETVAL = newSViv( MyENCODING_ISO_8859_13 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_ISO_8859_3()
+MyENCODING_ISO_8859_14()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_ISO_8859_3 );
+		RETVAL = newSViv( MyENCODING_ISO_8859_14 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_ISO_8859_4()
+MyENCODING_ISO_8859_15()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_ISO_8859_4 );
+		RETVAL = newSViv( MyENCODING_ISO_8859_15 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_ISO_8859_5()
+MyENCODING_ISO_8859_16()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_ISO_8859_5 );
+		RETVAL = newSViv( MyENCODING_ISO_8859_16 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_ISO_8859_6()
+MyENCODING_ISO_8859_2()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_ISO_8859_6 );
+		RETVAL = newSViv( MyENCODING_ISO_8859_2 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_ISO_8859_7()
+MyENCODING_ISO_8859_3()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_ISO_8859_7 );
+		RETVAL = newSViv( MyENCODING_ISO_8859_3 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_ISO_8859_8()
+MyENCODING_ISO_8859_4()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_ISO_8859_8 );
+		RETVAL = newSViv( MyENCODING_ISO_8859_4 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_KOI8_R()
+MyENCODING_ISO_8859_5()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_KOI8_R );
+		RETVAL = newSViv( MyENCODING_ISO_8859_5 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_KOI8_U()
+MyENCODING_ISO_8859_6()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_KOI8_U );
+		RETVAL = newSViv( MyENCODING_ISO_8859_6 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_MACINTOSH()
+MyENCODING_ISO_8859_7()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_MACINTOSH );
+		RETVAL = newSViv( MyENCODING_ISO_8859_7 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_WINDOWS_1250()
+MyENCODING_ISO_8859_8()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_WINDOWS_1250 );
+		RETVAL = newSViv( MyENCODING_ISO_8859_8 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_WINDOWS_1251()
+MyENCODING_ISO_8859_8_I()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_WINDOWS_1251 );
+		RETVAL = newSViv( MyENCODING_ISO_8859_8_I );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_WINDOWS_1252()
+MyENCODING_KOI8_R()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_WINDOWS_1252 );
+		RETVAL = newSViv( MyENCODING_KOI8_R );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_WINDOWS_1253()
+MyENCODING_KOI8_U()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_WINDOWS_1253 );
+		RETVAL = newSViv( MyENCODING_KOI8_U );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_WINDOWS_1254()
+MyENCODING_MACINTOSH()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_WINDOWS_1254 );
+		RETVAL = newSViv( MyENCODING_MACINTOSH );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_WINDOWS_1255()
+MyENCODING_SHIFT_JIS()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_WINDOWS_1255 );
+		RETVAL = newSViv( MyENCODING_SHIFT_JIS );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_WINDOWS_1256()
+MyENCODING_WINDOWS_1250()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_WINDOWS_1256 );
+		RETVAL = newSViv( MyENCODING_WINDOWS_1250 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_WINDOWS_1257()
+MyENCODING_WINDOWS_1251()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_WINDOWS_1257 );
+		RETVAL = newSViv( MyENCODING_WINDOWS_1251 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_WINDOWS_1258()
+MyENCODING_WINDOWS_1252()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_WINDOWS_1258 );
+		RETVAL = newSViv( MyENCODING_WINDOWS_1252 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_WINDOWS_874()
+MyENCODING_WINDOWS_1253()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_WINDOWS_874 );
+		RETVAL = newSViv( MyENCODING_WINDOWS_1253 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_X_MAC_CYRILLIC()
+MyENCODING_WINDOWS_1254()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_X_MAC_CYRILLIC );
+		RETVAL = newSViv( MyENCODING_WINDOWS_1254 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_ISO_2022_JP()
+MyENCODING_WINDOWS_1255()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_ISO_2022_JP );
+		RETVAL = newSViv( MyENCODING_WINDOWS_1255 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_GBK()
+MyENCODING_WINDOWS_1256()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_GBK );
+		RETVAL = newSViv( MyENCODING_WINDOWS_1256 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_SHIFT_JIS()
+MyENCODING_WINDOWS_1257()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_SHIFT_JIS );
+		RETVAL = newSViv( MyENCODING_WINDOWS_1257 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_EUC_JP()
+MyENCODING_WINDOWS_1258()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_EUC_JP );
+		RETVAL = newSViv( MyENCODING_WINDOWS_1258 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_ISO_8859_8_I()
+MyENCODING_WINDOWS_874()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_ISO_8859_8_I );
+		RETVAL = newSViv( MyENCODING_WINDOWS_874 );
 	OUTPUT:
 		RETVAL
 
 SV*
-MyHTML_ENCODING_LAST_ENTRY()
+MyENCODING_X_MAC_CYRILLIC()
 	CODE:
-		RETVAL = newSViv( MyHTML_ENCODING_LAST_ENTRY );
+		RETVAL = newSViv( MyENCODING_X_MAC_CYRILLIC );
 	OUTPUT:
 		RETVAL
 
+SV*
+MyENCODING_LAST_ENTRY()
+	CODE:
+		RETVAL = newSViv( MyENCODING_LAST_ENTRY );
+	OUTPUT:
+		RETVAL

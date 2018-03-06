@@ -22,12 +22,11 @@ PROTOTYPES: DISABLE
 #=sort 1
 
 SV*
-info(node, tree)
+info(node)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
 	
 	CODE:
-		RETVAL = newRV_noinc((SV *)sm_get_node_info(tree, node));
+		RETVAL = newRV_noinc((SV *)sm_get_node_info(node->tree, node));
 	OUTPUT:
 		RETVAL
 
@@ -117,10 +116,23 @@ token(node)
 
 #=sort 6
 
-SV*
-get_nodes_by_attribute_key(node, tree, key, out_status = &PL_sv_undef)
+HTML::MyHTML::Tree
+tree(node)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
+	
+	CODE:
+		RETVAL = node->tree;
+	OUTPUT:
+		RETVAL
+	POSTCALL:
+	  if(RETVAL == NULL)
+		XSRETURN_UNDEF;
+
+#=sort 7
+
+SV*
+get_nodes_by_attribute_key(node, key, out_status = &PL_sv_undef)
+	HTML::MyHTML::Tree::Node node;
 	SV* key;
 	SV* out_status;
 	
@@ -134,7 +146,7 @@ get_nodes_by_attribute_key(node, tree, key, out_status = &PL_sv_undef)
 		}
 		
 		myhtml_status_t status;
-		myhtml_collection_t *collection = myhtml_get_nodes_by_attribute_key(tree, NULL, node, char_key, len, &status);
+		myhtml_collection_t *collection = myhtml_get_nodes_by_attribute_key(node->tree, NULL, node, char_key, len, &status);
 		sm_set_out_status(out_status, status);
 		
 		if(status == MyHTML_STATUS_OK) {
@@ -149,16 +161,15 @@ get_nodes_by_attribute_key(node, tree, key, out_status = &PL_sv_undef)
 #=sort 6
 
 SV*
-get_nodes_by_attribute_value(node, tree, case_insensitive, key, value, out_status = &PL_sv_undef)
+get_nodes_by_attribute_value(node, case_insensitive, key, value, out_status = &PL_sv_undef)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
 	SV* case_insensitive;
 	SV* key;
 	SV* value;
 	SV* out_status;
 	
 	CODE:
-		RETVAL = sm_get_nodes_by_attribute_value(node, tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value);
+		RETVAL = sm_get_nodes_by_attribute_value(node, node->tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value);
 		
 	OUTPUT:
 		RETVAL
@@ -166,16 +177,15 @@ get_nodes_by_attribute_value(node, tree, case_insensitive, key, value, out_statu
 #=sort 6
 
 SV*
-get_nodes_by_attribute_value_whitespace_separated(node, tree, case_insensitive, key, value, out_status = &PL_sv_undef)
+get_nodes_by_attribute_value_whitespace_separated(node, case_insensitive, key, value, out_status = &PL_sv_undef)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
 	SV* case_insensitive;
 	SV* key;
 	SV* value;
 	SV* out_status;
 	
 	CODE:
-		RETVAL = sm_get_nodes_by_attribute_value(node, tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value_whitespace_separated);
+		RETVAL = sm_get_nodes_by_attribute_value(node, node->tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value_whitespace_separated);
 		
 	OUTPUT:
 		RETVAL
@@ -183,75 +193,70 @@ get_nodes_by_attribute_value_whitespace_separated(node, tree, case_insensitive, 
 #=sort 6
 
 SV*
-get_nodes_by_attribute_value_begin(node, tree, case_insensitive, key, value, out_status = &PL_sv_undef)
+get_nodes_by_attribute_value_begin(node, case_insensitive, key, value, out_status = &PL_sv_undef)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
 	SV* case_insensitive;
 	SV* key;
 	SV* value;
 	SV* out_status;
 	
 	CODE:
-		RETVAL = sm_get_nodes_by_attribute_value(node, tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value_begin);
+		RETVAL = sm_get_nodes_by_attribute_value(node, node->tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value_begin);
 		
 	OUTPUT:
 		RETVAL
 
 SV*
-get_nodes_by_attribute_value_end(node, tree, case_insensitive, key, value, out_status = &PL_sv_undef)
+get_nodes_by_attribute_value_end(node, case_insensitive, key, value, out_status = &PL_sv_undef)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
 	SV* case_insensitive;
 	SV* key;
 	SV* value;
 	SV* out_status;
 	
 	CODE:
-		RETVAL = sm_get_nodes_by_attribute_value(node, tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value_end);
+		RETVAL = sm_get_nodes_by_attribute_value(node, node->tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value_end);
 		
 	OUTPUT:
 		RETVAL
 
 SV*
-get_nodes_by_attribute_value_contain(node, tree, case_insensitive, key, value, out_status = &PL_sv_undef)
+get_nodes_by_attribute_value_contain(node, case_insensitive, key, value, out_status = &PL_sv_undef)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
 	SV* case_insensitive;
 	SV* key;
 	SV* value;
 	SV* out_status;
 	
 	CODE:
-		RETVAL = sm_get_nodes_by_attribute_value(node, tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value_contain);
+		RETVAL = sm_get_nodes_by_attribute_value(node, node->tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value_contain);
 		
 	OUTPUT:
 		RETVAL
 
 SV*
-get_nodes_by_attribute_value_hyphen_separated(node, tree, case_insensitive, key, value, out_status = &PL_sv_undef)
+get_nodes_by_attribute_value_hyphen_separated(node, case_insensitive, key, value, out_status = &PL_sv_undef)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
 	SV* case_insensitive;
 	SV* key;
 	SV* value;
 	SV* out_status;
 	
 	CODE:
-		RETVAL = sm_get_nodes_by_attribute_value(node, tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value_hyphen_separated);
+		RETVAL = sm_get_nodes_by_attribute_value(node, node->tree, case_insensitive, key, value, out_status, myhtml_get_nodes_by_attribute_value_hyphen_separated);
 		
 	OUTPUT:
 		RETVAL
 
 SV*
-get_nodes_by_tag_id(node, tree, tag_id, out_status = &PL_sv_undef)
+get_nodes_by_tag_id(node, tag_id, out_status = &PL_sv_undef)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
 	myhtml_tag_id_t tag_id;
 	SV* out_status;
 	
 	CODE:
 		myhtml_status_t status;
-		myhtml_collection_t* collection = myhtml_get_nodes_by_tag_id_in_scope(tree, NULL, node, tag_id, &status);
+		myhtml_collection_t* collection = myhtml_get_nodes_by_tag_id_in_scope(node->tree, NULL, node, tag_id, &status);
 		sm_set_out_status(out_status, status);
 		
 		if(status == MyHTML_STATUS_OK) {
@@ -267,44 +272,40 @@ get_nodes_by_tag_id(node, tree, tag_id, out_status = &PL_sv_undef)
 #=sort 7
 
 void
-free(node, tree)
+free(node)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
 	
 	CODE:
-		myhtml_node_free(tree, node);
+		myhtml_node_free(node);
 
 #=sort 8
 
 HTML::MyHTML::Tree::Node
-remove(node, tree)
+remove(node)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
 	
 	CODE:
-		RETVAL = myhtml_node_remove(tree, node);
+		RETVAL = myhtml_node_remove(node);
 	OUTPUT:
 		RETVAL
 
 #=sort 9
 
 void
-delete(node, tree)
+delete(node)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
 	
 	CODE:
-		myhtml_node_delete(tree, node);
+		myhtml_node_delete(node);
 
 #=sort 10
 
 void
-delete_recursive(node, tree)
+delete_recursive(node)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
 	
 	CODE:
-		myhtml_node_delete_recursive(tree, node);
+		myhtml_node_delete_recursive(node);
 
 #=sort 11
 
@@ -331,13 +332,12 @@ namespace(node)
 #=sort 13
 
 SV*
-tag_name(node, tree)
+tag_name(node)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
 	
 	CODE:
 		size_t length;
-		const char* name = myhtml_tag_name_by_id(tree, myhtml_node_tag_id(node), &length);
+		const char* name = myhtml_tag_name_by_id(node->tree, myhtml_node_tag_id(node), &length);
 		RETVAL = newSVpv(name, length);
 	OUTPUT:
 		RETVAL
@@ -378,12 +378,11 @@ attr_last(node)
 #=sort 17
 
 HTML::MyHTML::Tree::Attr
-attr_add(node, tree, key, value, encoding)
+attr_add(node, key, value, encoding)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
 	SV* key;
 	SV* value;
-	myhtml_encoding_t encoding;
+	myencoding_t encoding;
 	
 	PREINIT:
 		STRLEN key_len;
@@ -392,7 +391,7 @@ attr_add(node, tree, key, value, encoding)
 		const char *char_key   = SvPV(key, key_len);
 		const char *char_value = SvPV(key, value_len);
 		
-		RETVAL = myhtml_attribute_add(tree, node, char_key, key_len, char_value, value_len, encoding);
+		RETVAL = myhtml_attribute_add(node, char_key, key_len, char_value, value_len, encoding);
 	OUTPUT:
 		RETVAL
 
@@ -441,7 +440,7 @@ text(node)
 
 #=sort 21
 
-HTML::MyHTML::String
+HTML::MyCORE::String
 string(node)
 	HTML::MyHTML::Tree::Node node;
 	
@@ -453,35 +452,33 @@ string(node)
 #=sort 22
 
 void
-print(node, tree, fh, inc)
+print(node, fh)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
 	FILE* fh;
-	size_t inc;
 	
 	CODE:
-		myhtml_tree_print_by_node(tree, node, fh, inc);
+		myhtml_serialization_node_callback(node, myhtml_perl_tree_node_callback_print, fh);
 
 #=sort 23
 
 void
-print_children(node, tree, fh, inc)
+print_children(node, fh)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
 	FILE* fh;
-	size_t inc;
 	
 	CODE:
-		myhtml_tree_print_node_children(tree, node, fh, inc);
+		node = node->child;
+		while (node) {
+			myhtml_serialization_tree_callback(node, myhtml_perl_tree_node_callback_print, fh);
+			node = node->next;
+		}
 
 #=sort 24
 
 void
-print_all(node, tree, fh)
+print_all(node, fh)
 	HTML::MyHTML::Tree::Node node;
-	HTML::MyHTML::Tree tree;
 	FILE* fh;
 	
 	CODE:
-		myhtml_tree_print_node(tree, node, fh);
-
+		myhtml_serialization_tree_callback(node, myhtml_perl_tree_node_callback_print, fh);

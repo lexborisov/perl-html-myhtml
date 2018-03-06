@@ -12,7 +12,7 @@ WriteMakefile(
     ABSTRACT       => 'Fast HTML Parser using Threads with no outside dependencies',
     VERSION_FROM   => 'MyHTML.pm',
     NAME           => 'HTML::MyHTML',
-    LICENSE        => 'Apache 2.0',
+    LICENSE        => 'LGPL 2.1',
     LINKTYPE       => 'dynamic',
     LIBS           => ["-lpthread"],
 	CCFLAGS        => " --std=c99 ". $Config{ccflags},

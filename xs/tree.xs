@@ -96,17 +96,6 @@ get_tag(tree)
 
 #=sort 6
 
-HTML::MyHTML::Tag::Index
-get_tag_index(tree)
-	HTML::MyHTML::Tree tree;
-	
-	CODE:
-		RETVAL = myhtml_tree_get_tag_index(tree);
-	OUTPUT:
-		RETVAL
-
-#=sort 7
-
 HTML::MyHTML::Tree::Node
 document(tree)
 	HTML::MyHTML::Tree tree;

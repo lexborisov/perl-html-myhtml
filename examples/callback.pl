@@ -17,12 +17,11 @@ my $body = $res->content;
 # is normally if parse thread only one, otherwise use single mode MyHTML_OPTIONS_PARSE_MODE_SINGLE
 # or methods parse_single, parse_fragment_single, parse_chunk_single, parse_chunk_fragment_single
 # for development use single mode, it will be easier to debug
-my $myhtml = HTML::MyHTML->new(MyHTML_OPTIONS_DEFAULT, 1);
+my $myhtml = HTML::MyHTML->new(MyHTML_OPTIONS_PARSE_MODE_SINGLE, 0);
 my $tree = $myhtml->new_tree();
 
 # detect encoding
-my $encoding;
-$myhtml->encoding_detect($body, $encoding);
+my $encoding = prescan_stream_to_determine_encoding($body);
 
 my $args = {count => 0};
 

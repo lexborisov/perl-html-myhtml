@@ -88,13 +88,12 @@ remove(attr, node)
 		RETVAL
 
 void
-delete(attr, tree, node)
+delete(attr, node)
 	myhtml_tree_attr_t *attr;
-	myhtml_tree_t *tree;
 	myhtml_tree_node_t *node;
 	
 	CODE:
-		myhtml_attribute_delete(tree, node, attr);
+		myhtml_attribute_delete(node->tree, node, attr);
 
 void
 free(attr, tree)

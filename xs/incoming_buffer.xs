@@ -26,7 +26,7 @@ find_by_position(inc_buffer, begin)
 	SV* begin;
 	
 	CODE:
-		RETVAL = myhtml_incoming_buffer_find_by_position(inc_buffer, SvIV(begin));
+		RETVAL = mycore_incoming_buffer_find_by_position(inc_buffer, SvIV(begin));
 	OUTPUT:
 		RETVAL
 	POSTCALL:
@@ -38,8 +38,8 @@ data(inc_buffer)
 	HTML::Incoming::Buffer inc_buffer;
 	
 	CODE:
-		const char *data = myhtml_incoming_buffer_data(inc_buffer);
-		RETVAL = newSVpv(data, myhtml_incoming_buffer_size(inc_buffer));
+		const char *data = mycore_incoming_buffer_data(inc_buffer);
+		RETVAL = newSVpv(data, mycore_incoming_buffer_size(inc_buffer));
 	OUTPUT:
 		RETVAL
 
@@ -48,7 +48,7 @@ length(inc_buffer)
 	HTML::Incoming::Buffer inc_buffer;
 	
 	CODE:
-		RETVAL = newSViv(myhtml_incoming_buffer_length(inc_buffer));
+		RETVAL = newSViv(mycore_incoming_buffer_length(inc_buffer));
 	OUTPUT:
 		RETVAL
 
@@ -57,7 +57,7 @@ size(inc_buffer)
 	HTML::Incoming::Buffer inc_buffer;
 	
 	CODE:
-		RETVAL = newSViv(myhtml_incoming_buffer_size(inc_buffer));
+		RETVAL = newSViv(mycore_incoming_buffer_size(inc_buffer));
 	OUTPUT:
 		RETVAL
 
@@ -66,7 +66,7 @@ offset(inc_buffer)
 	HTML::Incoming::Buffer inc_buffer;
 	
 	CODE:
-		RETVAL = newSViv(myhtml_incoming_buffer_offset(inc_buffer));
+		RETVAL = newSViv(mycore_incoming_buffer_offset(inc_buffer));
 	OUTPUT:
 		RETVAL
 
@@ -76,7 +76,7 @@ relative_begin(inc_buffer, begin)
 	SV* begin;
 	
 	CODE:
-		RETVAL = newSViv(myhtml_incoming_buffer_relative_begin(inc_buffer, SvIV(begin)));
+		RETVAL = newSViv(mycore_incoming_buffer_relative_begin(inc_buffer, SvIV(begin)));
 	OUTPUT:
 		RETVAL
 
@@ -87,7 +87,7 @@ available_length(inc_buffer, relative_begin, length)
 	SV* length;
 	
 	CODE:
-		RETVAL = newSViv(myhtml_incoming_buffer_available_length(inc_buffer, SvIV(relative_begin), SvIV(length)));
+		RETVAL = newSViv(mycore_incoming_buffer_available_length(inc_buffer, SvIV(relative_begin), SvIV(length)));
 	OUTPUT:
 		RETVAL
 
@@ -96,7 +96,7 @@ next(inc_buffer)
 	HTML::Incoming::Buffer inc_buffer;
 	
 	CODE:
-		RETVAL = myhtml_incoming_buffer_next(inc_buffer);
+		RETVAL = mycore_incoming_buffer_next(inc_buffer);
 	OUTPUT:
 		RETVAL
 	POSTCALL:
@@ -108,7 +108,7 @@ prev(inc_buffer)
 	HTML::Incoming::Buffer inc_buffer;
 	
 	CODE:
-		RETVAL = myhtml_incoming_buffer_prev(inc_buffer);
+		RETVAL = mycore_incoming_buffer_prev(inc_buffer);
 	OUTPUT:
 		RETVAL
 	POSTCALL:

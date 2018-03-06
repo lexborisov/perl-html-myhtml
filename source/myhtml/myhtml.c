@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2015-2016 Alexander Borisov
+ Copyright (C) 2015-2017 Alexander Borisov
  
  This library is free software; you can redistribute it and/or
  modify it under the terms of the GNU Lesser General Public
@@ -22,7 +22,7 @@
 
 void myhtml_init_marker(myhtml_t* myhtml)
 {
-    myhtml->marker = (myhtml_tree_node_t*)myhtml_malloc(sizeof(myhtml_tree_node_t));
+    myhtml->marker = (myhtml_tree_node_t*)mycore_malloc(sizeof(myhtml_tree_node_t));
     
     if(myhtml->marker)
         myhtml_tree_node_clean(myhtml->marker);
@@ -31,80 +31,152 @@ void myhtml_init_marker(myhtml_t* myhtml)
 void myhtml_destroy_marker(myhtml_t* myhtml)
 {
     if(myhtml->marker)
-        myhtml_free(myhtml->marker);
+        mycore_free(myhtml->marker);
 }
+
+#ifndef MyCORE_BUILD_WITHOUT_THREADS
+mystatus_t myhtml_stream_create(myhtml_t* myhtml, mystatus_t* status, size_t count, size_t id_increase)
+{
+    if(count == 0) {
+        myhtml->thread_stream = NULL;
+        
+        *status = MyHTML_STATUS_OK;
+        return *status;
+    }
+    
+    myhtml->thread_stream = mythread_create();
+    if(myhtml->thread_stream == NULL)
+        *status = MyCORE_STATUS_THREAD_ERROR_MEMORY_ALLOCATION;
+    
+    *status = mythread_init(myhtml->thread_stream, MyTHREAD_TYPE_STREAM, count, id_increase);
+    
+    if(*status)
+        myhtml->thread_stream = mythread_destroy(myhtml->thread_stream, NULL, NULL, true);
+    
+    return *status;
+}
+
+mystatus_t myhtml_batch_create(myhtml_t* myhtml, mystatus_t* status, size_t count, size_t id_increase)
+{
+    if(count == 0) {
+        myhtml->thread_batch = NULL;
+        
+        *status = MyHTML_STATUS_OK;
+        return *status;
+    }
+    
+    myhtml->thread_batch = mythread_create();
+    if(myhtml->thread_stream == NULL) {
+        myhtml->thread_stream = mythread_destroy(myhtml->thread_stream, NULL, NULL, true);
+        *status = MyCORE_STATUS_THREAD_ERROR_MEMORY_ALLOCATION;
+    }
+    
+    *status = mythread_init(myhtml->thread_batch, MyTHREAD_TYPE_BATCH, count, id_increase);
+    
+    if(*status)
+        myhtml->thread_batch = mythread_destroy(myhtml->thread_batch , NULL, NULL, true);
+    
+    return *status;
+}
+
+mystatus_t myhtml_create_stream_and_batch(myhtml_t* myhtml, size_t stream_count, size_t batch_count)
+{
+    mystatus_t status;
+    
+    /* stream */
+    if(myhtml_stream_create(myhtml, &status, stream_count, 0)) {
+        return status;
+    }
+    
+    /* batch */
+    if(myhtml_batch_create(myhtml, &status, batch_count, stream_count)) {
+        myhtml->thread_stream = mythread_destroy(myhtml->thread_stream, NULL, NULL, true);
+        return status;
+    }
+    
+    return status;
+}
+#endif /* if undef MyCORE_BUILD_WITHOUT_THREADS */
 
 myhtml_t * myhtml_create(void)
 {
-    return (myhtml_t*)myhtml_malloc(sizeof(myhtml_t));
+    return (myhtml_t*)mycore_calloc(1, sizeof(myhtml_t));
 }
 
-myhtml_status_t myhtml_init(myhtml_t* myhtml, enum myhtml_options opt, size_t thread_count, size_t queue_size)
+mystatus_t myhtml_init(myhtml_t* myhtml, enum myhtml_options opt, size_t thread_count, size_t queue_size)
 {
-    myhtml_status_t status;
+    mystatus_t status;
     
+    myhtml->opt = opt;
     myhtml_init_marker(myhtml);
     
     status = myhtml_tokenizer_state_init(myhtml);
-    if(status) {
-        myhtml->insertion_func = NULL;
-        myhtml->thread = NULL;
-        
-        return status;
-    }
-    
-    status = myhtml_rules_init(myhtml);
-    if(status) {
-        myhtml->thread = NULL;
-        
-        return status;
-    }
-    
-    myhtml->opt = opt;
-    myhtml->thread = mythread_create();
-    
-    if(myhtml->thread == NULL)
-        return MyHTML_STATUS_THREAD_ERROR_MEMORY_ALLOCATION;
-    
-#ifdef MyHTML_BUILD_WITHOUT_THREADS
-    
-    status = mythread_init(myhtml->thread, NULL, thread_count, queue_size);
-    
     if(status)
         return status;
     
-#else /* MyHTML_BUILD_WITHOUT_THREADS */
+    status = myhtml_rules_init(myhtml);
+
+#ifdef MyCORE_BUILD_WITHOUT_THREADS
+    
+    myhtml->thread_stream = NULL;
+    myhtml->thread_batch  = NULL;
+    myhtml->thread_total  = 0;
+    
+#else /* if undef MyCORE_BUILD_WITHOUT_THREADS */
+    if(status)
+        return status;
+    
     switch (opt) {
         case MyHTML_OPTIONS_PARSE_MODE_SINGLE:
-            status = mythread_init(myhtml->thread, "lastmac", 0, queue_size);
-            if(status)
+            if((status = myhtml_create_stream_and_batch(myhtml, 0, 0)))
                 return status;
             
             break;
             
         case MyHTML_OPTIONS_PARSE_MODE_ALL_IN_ONE:
-            status = mythread_init(myhtml->thread, "lastmac", 1, queue_size);
-            if(status)
+            if((status = myhtml_create_stream_and_batch(myhtml, 1, 0)))
                 return status;
             
-            myhread_create_stream(myhtml->thread, myhtml_parser_worker_stream, &status);
+            myhtml->thread_stream->context = mythread_queue_list_create(&status);
+            status = myhread_entry_create(myhtml->thread_stream, mythread_function_queue_stream, myhtml_parser_worker_stream, MyTHREAD_OPT_STOP);
+            
             break;
             
         default:
             // default MyHTML_OPTIONS_PARSE_MODE_SEPARATELY
-            if(thread_count == 0)
-                thread_count = 1;
+            if(thread_count < 2)
+                thread_count = 2;
             
-            status = mythread_init(myhtml->thread, "lastmac", (thread_count + 1), queue_size);
+            if((status = myhtml_create_stream_and_batch(myhtml, 1, (thread_count - 1))))
+                return status;
+            
+            myhtml->thread_stream->context = mythread_queue_list_create(&status);
+            myhtml->thread_batch->context  = myhtml->thread_stream->context;
+            
+            status = myhread_entry_create(myhtml->thread_stream, mythread_function_queue_stream, myhtml_parser_stream, MyTHREAD_OPT_STOP);
             if(status)
                 return status;
             
-            myhread_create_stream(myhtml->thread, myhtml_parser_stream, &status);
-            myhread_create_batch(myhtml->thread, myhtml_parser_worker, &status, thread_count);
+            for(size_t i = 0; i < myhtml->thread_batch->entries_size; i++) {
+                status = myhread_entry_create(myhtml->thread_batch, mythread_function_queue_batch, myhtml_parser_worker, MyTHREAD_OPT_STOP);
+                
+                if(status)
+                    return status;
+            }
+            
             break;
     }
     
-#endif /* MyHTML_BUILD_WITHOUT_THREADS */
+    myhtml->thread_total = thread_count;
+    
+    myhtml->thread_list[0] = myhtml->thread_stream;
+    myhtml->thread_list[1] = myhtml->thread_batch;
+    myhtml->thread_list[2] = NULL;
+    
+#endif /* if undef MyCORE_BUILD_WITHOUT_THREADS */
+    
+    if(status)
+        return status;
     
     myhtml_clean(myhtml);
     
@@ -113,7 +185,7 @@ myhtml_status_t myhtml_init(myhtml_t* myhtml, enum myhtml_options opt, size_t th
 
 void myhtml_clean(myhtml_t* myhtml)
 {
-    mythread_clean(myhtml->thread);
+    /* some code */
 }
 
 myhtml_t* myhtml_destroy(myhtml_t* myhtml)
@@ -123,25 +195,41 @@ myhtml_t* myhtml_destroy(myhtml_t* myhtml)
     
     myhtml_destroy_marker(myhtml);
     
-    mythread_destroy(myhtml->thread, true);
+#ifndef MyCORE_BUILD_WITHOUT_THREADS
+    if(myhtml->thread_stream) {
+        mythread_queue_list_t* queue_list = myhtml->thread_stream->context;
+
+        if(queue_list)
+            mythread_queue_list_wait_for_done(myhtml->thread_stream, queue_list);
+        
+        myhtml->thread_stream = mythread_destroy(myhtml->thread_stream, mythread_callback_quit, NULL, true);
+        
+        if(myhtml->thread_batch)
+            myhtml->thread_batch = mythread_destroy(myhtml->thread_batch, mythread_callback_quit, NULL, true);
+        
+        if(queue_list)
+            mythread_queue_list_destroy(queue_list);
+    }
+#endif /* if undef MyCORE_BUILD_WITHOUT_THREADS */
+    
     myhtml_tokenizer_state_destroy(myhtml);
     
     if(myhtml->insertion_func)
-        myhtml_free(myhtml->insertion_func);
+        mycore_free(myhtml->insertion_func);
     
-    myhtml_free(myhtml);
+    mycore_free(myhtml);
     
     return NULL;
 }
 
-myhtml_status_t myhtml_parse(myhtml_tree_t* tree, myhtml_encoding_t encoding, const char* html, size_t html_size)
+mystatus_t myhtml_parse(myhtml_tree_t* tree, myencoding_t encoding, const char* html, size_t html_size)
 {
     if(tree->flags & MyHTML_TREE_FLAGS_PARSE_END) {
         myhtml_tree_clean(tree);
     }
     
     myhtml_encoding_set(tree, encoding);
-    myhtml_status_t status = myhtml_tokenizer_begin(tree, html, html_size);
+    mystatus_t status = myhtml_tokenizer_begin(tree, html, html_size);
     
     if(status)
         return status;
@@ -149,7 +237,7 @@ myhtml_status_t myhtml_parse(myhtml_tree_t* tree, myhtml_encoding_t encoding, co
     return myhtml_tokenizer_end(tree);
 }
 
-myhtml_status_t myhtml_parse_fragment(myhtml_tree_t* tree, myhtml_encoding_t encoding, const char* html, size_t html_size, myhtml_tag_id_t tag_id, enum myhtml_namespace ns)
+mystatus_t myhtml_parse_fragment(myhtml_tree_t* tree, myencoding_t encoding, const char* html, size_t html_size, myhtml_tag_id_t tag_id, enum myhtml_namespace ns)
 {
     if(tree->flags & MyHTML_TREE_FLAGS_PARSE_END) {
         myhtml_tree_clean(tree);
@@ -165,7 +253,7 @@ myhtml_status_t myhtml_parse_fragment(myhtml_tree_t* tree, myhtml_encoding_t enc
         return MyHTML_STATUS_TOKENIZER_ERROR_FRAGMENT_INIT;
     
     myhtml_encoding_set(tree, encoding);
-    myhtml_status_t status = myhtml_tokenizer_begin(tree, html, html_size);
+    mystatus_t status = myhtml_tokenizer_begin(tree, html, html_size);
     
     if(status)
         return status;
@@ -173,7 +261,7 @@ myhtml_status_t myhtml_parse_fragment(myhtml_tree_t* tree, myhtml_encoding_t enc
     return myhtml_tokenizer_end(tree);
 }
 
-myhtml_status_t myhtml_parse_single(myhtml_tree_t* tree, myhtml_encoding_t encoding, const char* html, size_t html_size)
+mystatus_t myhtml_parse_single(myhtml_tree_t* tree, myencoding_t encoding, const char* html, size_t html_size)
 {
     if(tree->flags & MyHTML_TREE_FLAGS_PARSE_END) {
         myhtml_tree_clean(tree);
@@ -183,7 +271,7 @@ myhtml_status_t myhtml_parse_single(myhtml_tree_t* tree, myhtml_encoding_t encod
     
     myhtml_encoding_set(tree, encoding);
     
-    myhtml_status_t status = myhtml_tokenizer_begin(tree, html, html_size);
+    mystatus_t status = myhtml_tokenizer_begin(tree, html, html_size);
     
     if(status)
         return status;
@@ -191,7 +279,7 @@ myhtml_status_t myhtml_parse_single(myhtml_tree_t* tree, myhtml_encoding_t encod
     return myhtml_tokenizer_end(tree);
 }
 
-myhtml_status_t myhtml_parse_fragment_single(myhtml_tree_t* tree, myhtml_encoding_t encoding, const char* html, size_t html_size, myhtml_tag_id_t tag_id, enum myhtml_namespace ns)
+mystatus_t myhtml_parse_fragment_single(myhtml_tree_t* tree, myencoding_t encoding, const char* html, size_t html_size, myhtml_tag_id_t tag_id, enum myhtml_namespace ns)
 {
     if(tree->flags & MyHTML_TREE_FLAGS_PARSE_END) {
         myhtml_tree_clean(tree);
@@ -210,7 +298,7 @@ myhtml_status_t myhtml_parse_fragment_single(myhtml_tree_t* tree, myhtml_encodin
     
     myhtml_encoding_set(tree, encoding);
     
-    myhtml_status_t status = myhtml_tokenizer_begin(tree, html, html_size);
+    mystatus_t status = myhtml_tokenizer_begin(tree, html, html_size);
     
     if(status)
         return status;
@@ -218,7 +306,7 @@ myhtml_status_t myhtml_parse_fragment_single(myhtml_tree_t* tree, myhtml_encodin
     return myhtml_tokenizer_end(tree);
 }
 
-myhtml_status_t myhtml_parse_chunk(myhtml_tree_t* tree, const char* html, size_t html_size)
+mystatus_t myhtml_parse_chunk(myhtml_tree_t* tree, const char* html, size_t html_size)
 {
     if(tree->flags & MyHTML_TREE_FLAGS_PARSE_END) {
         myhtml_tree_clean(tree);
@@ -227,7 +315,7 @@ myhtml_status_t myhtml_parse_chunk(myhtml_tree_t* tree, const char* html, size_t
     return  myhtml_tokenizer_chunk(tree, html, html_size);
 }
 
-myhtml_status_t myhtml_parse_chunk_fragment(myhtml_tree_t* tree, const char* html, size_t html_size, myhtml_tag_id_t tag_id, enum myhtml_namespace ns)
+mystatus_t myhtml_parse_chunk_fragment(myhtml_tree_t* tree, const char* html, size_t html_size, myhtml_tag_id_t tag_id, enum myhtml_namespace ns)
 {
     if(tree->flags & MyHTML_TREE_FLAGS_PARSE_END) {
         myhtml_tree_clean(tree);
@@ -245,7 +333,7 @@ myhtml_status_t myhtml_parse_chunk_fragment(myhtml_tree_t* tree, const char* htm
     return myhtml_tokenizer_chunk(tree, html, html_size);
 }
 
-myhtml_status_t myhtml_parse_chunk_single(myhtml_tree_t* tree, const char* html, size_t html_size)
+mystatus_t myhtml_parse_chunk_single(myhtml_tree_t* tree, const char* html, size_t html_size)
 {
     if((tree->flags & MyHTML_TREE_FLAGS_SINGLE_MODE) == 0)
         tree->flags |= MyHTML_TREE_FLAGS_SINGLE_MODE;
@@ -253,7 +341,7 @@ myhtml_status_t myhtml_parse_chunk_single(myhtml_tree_t* tree, const char* html,
     return myhtml_parse_chunk(tree, html, html_size);
 }
 
-myhtml_status_t myhtml_parse_chunk_fragment_single(myhtml_tree_t* tree, const char* html, size_t html_size, myhtml_tag_id_t tag_id, enum myhtml_namespace ns)
+mystatus_t myhtml_parse_chunk_fragment_single(myhtml_tree_t* tree, const char* html, size_t html_size, myhtml_tag_id_t tag_id, enum myhtml_namespace ns)
 {
     if((tree->flags & MyHTML_TREE_FLAGS_SINGLE_MODE) == 0)
         tree->flags |= MyHTML_TREE_FLAGS_SINGLE_MODE;
@@ -261,21 +349,21 @@ myhtml_status_t myhtml_parse_chunk_fragment_single(myhtml_tree_t* tree, const ch
     return myhtml_parse_chunk_fragment(tree, html, html_size, tag_id, ns);
 }
 
-myhtml_status_t myhtml_parse_chunk_end(myhtml_tree_t* tree)
+mystatus_t myhtml_parse_chunk_end(myhtml_tree_t* tree)
 {
     return myhtml_tokenizer_end(tree);
 }
 
-void myhtml_encoding_set(myhtml_tree_t* tree, myhtml_encoding_t encoding)
+void myhtml_encoding_set(myhtml_tree_t* tree, myencoding_t encoding)
 {
-    if(encoding >= MyHTML_ENCODING_LAST_ENTRY)
+    if(encoding >= MyENCODING_LAST_ENTRY)
         return;
     
     tree->encoding_usereq = encoding;
     tree->encoding        = encoding;
 }
 
-myhtml_encoding_t myhtml_encoding_get(myhtml_tree_t* tree)
+myencoding_t myhtml_encoding_get(myhtml_tree_t* tree)
 {
     return tree->encoding;
 }
@@ -284,7 +372,7 @@ myhtml_encoding_t myhtml_encoding_get(myhtml_tree_t* tree)
  * Nodes
  */
 
-myhtml_status_t myhtml_get_nodes_by_tag_id_in_scope_find_recursion(myhtml_tree_node_t *node, myhtml_collection_t *collection, myhtml_tag_id_t tag_id)
+mystatus_t myhtml_get_nodes_by_tag_id_in_scope_find_recursion(myhtml_tree_node_t *node, myhtml_collection_t *collection, myhtml_tag_id_t tag_id)
 {
     while(node) {
         if(node->tag_id == tag_id) {
@@ -293,7 +381,7 @@ myhtml_status_t myhtml_get_nodes_by_tag_id_in_scope_find_recursion(myhtml_tree_n
             
             if(collection->length >= collection->size)
             {
-                myhtml_status_t mystatus = myhtml_collection_check_size(collection, 1024, 0);
+                mystatus_t mystatus = myhtml_collection_check_size(collection, 1024, 0);
                 
                 if(mystatus != MyHTML_STATUS_OK)
                     return mystatus;
@@ -309,12 +397,12 @@ myhtml_status_t myhtml_get_nodes_by_tag_id_in_scope_find_recursion(myhtml_tree_n
     return MyHTML_STATUS_OK;
 }
 
-myhtml_collection_t * myhtml_get_nodes_by_tag_id_in_scope(myhtml_tree_t* tree, myhtml_collection_t *collection, myhtml_tree_node_t *node, myhtml_tag_id_t tag_id, myhtml_status_t *status)
+myhtml_collection_t * myhtml_get_nodes_by_tag_id_in_scope(myhtml_tree_t* tree, myhtml_collection_t *collection, myhtml_tree_node_t *node, myhtml_tag_id_t tag_id, mystatus_t *status)
 {
     if(node == NULL)
         return NULL;
     
-    myhtml_status_t mystatus = MyHTML_STATUS_OK;
+    mystatus_t mystatus = MyHTML_STATUS_OK;
     
     if(collection == NULL) {
         collection = myhtml_collection_create(1024, &mystatus);
@@ -338,63 +426,69 @@ myhtml_collection_t * myhtml_get_nodes_by_tag_id_in_scope(myhtml_tree_t* tree, m
     return collection;
 }
 
-myhtml_collection_t * myhtml_get_nodes_by_name_in_scope(myhtml_tree_t* tree, myhtml_collection_t *collection, myhtml_tree_node_t *node, const char* html, size_t length, myhtml_status_t *status)
+myhtml_collection_t * myhtml_get_nodes_by_name_in_scope(myhtml_tree_t* tree, myhtml_collection_t *collection, myhtml_tree_node_t *node, const char* html, size_t length, mystatus_t *status)
 {
     const myhtml_tag_context_t *tag_ctx = myhtml_tag_get_by_name(tree->tags, html, length);
     return myhtml_get_nodes_by_tag_id_in_scope(tree, collection, node, tag_ctx->id, status);
 }
 
-myhtml_collection_t * myhtml_get_nodes_by_tag_id(myhtml_tree_t* tree, myhtml_collection_t *collection, myhtml_tag_id_t tag_id, myhtml_status_t *status)
+myhtml_collection_t * myhtml_get_nodes_by_tag_id(myhtml_tree_t* tree, myhtml_collection_t *collection, myhtml_tag_id_t tag_id, mystatus_t *status)
 {
-    myhtml_tag_index_entry_t *index_tag = myhtml_tag_index_entry(tree->indexes->tags, tag_id);
-    myhtml_tag_index_node_t *index_node = myhtml_tag_index_first(tree->indexes->tags, tag_id);
-    
-    if(index_tag->count == 0) {
-        if(status)
-            *status = MyHTML_STATUS_OK;
-        
-        return collection;
-    }
-    
-    myhtml_status_t mystatus = MyHTML_STATUS_OK;
-    size_t idx = 0;
-    
     if(collection == NULL) {
-        collection = myhtml_collection_create((index_tag->count + 128), &mystatus);
+        collection = myhtml_collection_create(1024, NULL);
         
-        collection->length += index_tag->count;
-    }
-    else {
-        idx = collection->length;
-        mystatus = myhtml_collection_check_size(collection, index_tag->count, 128);
+        if(collection == NULL)
+            return NULL;
     }
     
-    if(mystatus) {
-        if(status)
-            *status = mystatus;
-        
-        return collection;
-    }
+    myhtml_tree_node_t *node = tree->node_html;
     
-    while (index_node)
+    while(node)
     {
-        collection->list[idx] = index_node->node;
-        idx++;
+        if(node->tag_id == tag_id)
+        {
+            if(myhtml_collection_check_size(collection, 1, 1024) == MyHTML_STATUS_OK) {
+                collection->list[ collection->length ] = node;
+                collection->length++;
+            }
+            else {
+                if(status)
+                    *status = MyHTML_STATUS_ERROR_MEMORY_ALLOCATION;
+                
+                return collection;
+            }
+        }
         
-        index_node = index_node->next;
+        if(node->child)
+            node = node->child;
+        else {
+            while(node != tree->node_html && node->next == NULL)
+                node = node->parent;
+            
+            if(node == tree->node_html)
+                break;
+            
+            node = node->next;
+        }
     }
     
-    collection->list[idx] = NULL;
-    
-    if(status)
-        *status = mystatus;
+    if(myhtml_collection_check_size(collection, 1, 1024) == MyHTML_STATUS_OK) {
+        collection->list[ collection->length ] = NULL;
+    }
+    else if(status) {
+        *status = MyHTML_STATUS_ERROR_MEMORY_ALLOCATION;
+    }
     
     return collection;
 }
 
-myhtml_collection_t * myhtml_get_nodes_by_name(myhtml_tree_t* tree, myhtml_collection_t *collection, const char* html, size_t length, myhtml_status_t *status)
+myhtml_collection_t * myhtml_get_nodes_by_name(myhtml_tree_t* tree, myhtml_collection_t *collection, const char* html, size_t length, mystatus_t *status)
 {
     const myhtml_tag_context_t *tag_ctx = myhtml_tag_get_by_name(tree->tags, html, length);
+    
+    if(tag_ctx == NULL)
+        return NULL;
+    
     return myhtml_get_nodes_by_tag_id(tree, collection, tag_ctx->id, status);
 }
 
@@ -451,107 +545,106 @@ myhtml_tree_node_t * myhtml_node_create(myhtml_tree_t* tree, myhtml_tag_id_t tag
     return node;
 }
 
-myhtml_tree_node_t * myhtml_node_remove(myhtml_tree_t* tree, myhtml_tree_node_t *node)
+myhtml_tree_node_t * myhtml_node_remove(myhtml_tree_node_t *node)
 {
-    return myhtml_tree_node_remove(tree, node);
+    return myhtml_tree_node_remove(node);
 }
 
-void myhtml_node_delete(myhtml_tree_t* tree, myhtml_tree_node_t *node)
+void myhtml_node_delete(myhtml_tree_node_t *node)
 {
-    myhtml_tree_node_delete(tree, node);
+    myhtml_tree_node_delete(node);
 }
 
-void myhtml_node_delete_recursive(myhtml_tree_t* tree, myhtml_tree_node_t *node)
+void myhtml_node_delete_recursive(myhtml_tree_node_t *node)
 {
-    myhtml_tree_node_delete_recursive(tree, node);
+    myhtml_tree_node_delete_recursive(node);
 }
 
-void myhtml_node_free(myhtml_tree_t* tree, myhtml_tree_node_t *node)
+void myhtml_node_free(myhtml_tree_node_t *node)
 {
-    myhtml_tree_node_free(tree, node);
+    myhtml_tree_node_free(node);
 }
 
-myhtml_tree_node_t * myhtml_node_insert_before(myhtml_tree_t* tree, myhtml_tree_node_t *target, myhtml_tree_node_t *node)
-{
-    if(target == NULL || node == NULL)
-        return NULL;
-    
-    myhtml_tree_node_insert_before(tree, target, node);
-    
-    return node;
-}
-
-myhtml_tree_node_t * myhtml_node_insert_after(myhtml_tree_t* tree, myhtml_tree_node_t *target, myhtml_tree_node_t *node)
+myhtml_tree_node_t * myhtml_node_insert_before(myhtml_tree_node_t *target, myhtml_tree_node_t *node)
 {
     if(target == NULL || node == NULL)
         return NULL;
     
-    myhtml_tree_node_insert_after(tree, target, node);
+    myhtml_tree_node_insert_before(target, node);
     
     return node;
 }
 
-myhtml_tree_node_t * myhtml_node_append_child(myhtml_tree_t* tree, myhtml_tree_node_t *target, myhtml_tree_node_t *node)
+myhtml_tree_node_t * myhtml_node_insert_after(myhtml_tree_node_t *target, myhtml_tree_node_t *node)
 {
     if(target == NULL || node == NULL)
         return NULL;
     
-    myhtml_tree_node_add_child(tree, target, node);
+    myhtml_tree_node_insert_after(target, node);
     
     return node;
 }
 
-myhtml_tree_node_t * myhtml_node_insert_to_appropriate_place(myhtml_tree_t* tree, myhtml_tree_node_t *target, myhtml_tree_node_t *node)
+myhtml_tree_node_t * myhtml_node_append_child(myhtml_tree_node_t *target, myhtml_tree_node_t *node)
+{
+    if(target == NULL || node == NULL)
+        return NULL;
+    
+    myhtml_tree_node_add_child(target, node);
+    
+    return node;
+}
+
+myhtml_tree_node_t * myhtml_node_insert_to_appropriate_place(myhtml_tree_node_t *target, myhtml_tree_node_t *node)
 {
     if(target == NULL || node == NULL)
         return NULL;
     
     enum myhtml_tree_insertion_mode mode;
     
-    tree->foster_parenting = true;
-    target = myhtml_tree_appropriate_place_inserting_in_tree(tree, target, &mode);
-    tree->foster_parenting = false;
+    target->tree->foster_parenting = true;
+    target = myhtml_tree_appropriate_place_inserting_in_tree(target, &mode);
+    target->tree->foster_parenting = false;
     
-    myhtml_tree_node_insert_by_mode(tree, target, node, mode);
+    myhtml_tree_node_insert_by_mode(target, node, mode);
     
     return node;
 }
 
-myhtml_string_t * myhtml_node_text_set(myhtml_tree_t* tree, myhtml_tree_node_t *node, const char* text, size_t length, myhtml_encoding_t encoding)
+mycore_string_t * myhtml_node_text_set(myhtml_tree_node_t *node, const char* text, size_t length, myencoding_t encoding)
 {
     if(node == NULL)
         return NULL;
     
-    if(encoding >= MyHTML_ENCODING_LAST_ENTRY)
+    if(encoding >= MyENCODING_LAST_ENTRY)
         return NULL;
     
+    myhtml_tree_t* tree = node->tree;
+    
     if(node->token == NULL) {
-        mcobject_async_status_t mcstatus;
-        node->token = (myhtml_token_node_t*)mcobject_async_malloc(tree->token->nodes_obj, tree->mcasync_token_id, &mcstatus);
+        node->token = myhtml_token_node_create(tree->token, tree->mcasync_rules_token_id);
         
-        if(mcstatus)
+        if(node->token == NULL)
             return NULL;
-        
-        myhtml_token_node_clean(node->token);
     }
     
     if(node->token->str.data == NULL) {
-        myhtml_string_init(tree->mchar, tree->mchar_node_id, &node->token->str, (length + 2));
+        mycore_string_init(tree->mchar, tree->mchar_node_id, &node->token->str, (length + 2));
     }
     else {
         if(node->token->str.size < length) {
             mchar_async_free(tree->mchar, node->token->str.node_idx, node->token->str.data);
-            myhtml_string_init(tree->mchar, tree->mchar_node_id, &node->token->str, length);
+            mycore_string_init(tree->mchar, tree->mchar_node_id, &node->token->str, length);
         }
         else
             node->token->str.length = 0;
     }
     
-    if(encoding != MyHTML_ENCODING_UTF_8) {
-        myhtml_string_append_with_convert_encoding(&node->token->str, text, length, encoding);
+    if(encoding != MyENCODING_UTF_8) {
+        myencoding_string_append(&node->token->str, text, length, encoding);
     }
     else {
-        myhtml_string_append(&node->token->str, text, length);
+        mycore_string_append(&node->token->str, text, length);
     }
     
     node->token->raw_begin  = 0;
@@ -560,31 +653,30 @@ myhtml_string_t * myhtml_node_text_set(myhtml_tree_t* tree, myhtml_tree_node_t *
     return &node->token->str;
 }
 
-myhtml_string_t * myhtml_node_text_set_with_charef(myhtml_tree_t* tree, myhtml_tree_node_t *node, const char* text, size_t length, myhtml_encoding_t encoding)
+mycore_string_t * myhtml_node_text_set_with_charef(myhtml_tree_node_t *node, const char* text, size_t length, myencoding_t encoding)
 {
     if(node == NULL)
         return NULL;
     
-    if(encoding >= MyHTML_ENCODING_LAST_ENTRY)
+    if(encoding >= MyENCODING_LAST_ENTRY)
         return NULL;
     
+    myhtml_tree_t* tree = node->tree;
+    
     if(node->token == NULL) {
-        mcobject_async_status_t mcstatus;
-        node->token = (myhtml_token_node_t*)mcobject_async_malloc(tree->token->nodes_obj, tree->mcasync_token_id, &mcstatus);
+        node->token = myhtml_token_node_create(tree->token, tree->mcasync_rules_token_id);
         
-        if(mcstatus)
+        if(node->token == NULL)
             return NULL;
-        
-        myhtml_token_node_clean(node->token);
     }
     
     if(node->token->str.data == NULL) {
-        myhtml_string_init(tree->mchar, tree->mchar_node_id, &node->token->str, (length + 2));
+        mycore_string_init(tree->mchar, tree->mchar_node_id, &node->token->str, (length + 2));
     }
     else {
         if(node->token->str.size < length) {
             mchar_async_free(tree->mchar, node->token->str.node_idx, node->token->str.data);
-            myhtml_string_init(tree->mchar, tree->mchar_node_id, &node->token->str, length);
+            mycore_string_init(tree->mchar, tree->mchar_node_id, &node->token->str, length);
         }
         else
             node->token->str.length = 0;
@@ -594,7 +686,7 @@ myhtml_string_t * myhtml_node_text_set_with_charef(myhtml_tree_t* tree, myhtml_t
     myhtml_data_process_entry_clean(&proc_entry);
     
     proc_entry.encoding = encoding;
-    myhtml_encoding_result_clean(&proc_entry.res);
+    myencoding_result_clean(&proc_entry.res);
     
     myhtml_data_process(&proc_entry, &node->token->str, text, length);
     myhtml_data_process_end(&proc_entry, &node->token->str);
@@ -633,15 +725,15 @@ const char * myhtml_tag_name_by_id(myhtml_tree_t* tree, myhtml_tag_id_t tag_id, 
     if(tree == NULL || tree->tags == NULL)
         return NULL;
     
-    const myhtml_tag_context_t *ctx = myhtml_tag_get_by_id(tree->tags, tag_id);
+    const myhtml_tag_context_t *tag_ctx = myhtml_tag_get_by_id(tree->tags, tag_id);
     
-    if(ctx == NULL)
+    if(tag_ctx == NULL)
         return NULL;
     
     if(length)
-        *length = ctx->name_length;
+        *length = tag_ctx->name_length;
     
-    return ctx->name;
+    return tag_ctx->name;
 }
 
 myhtml_tag_id_t myhtml_tag_id_by_name(myhtml_tree_t* tree, const char *tag_name, size_t length)
@@ -663,6 +755,37 @@ bool myhtml_node_is_close_self(myhtml_tree_node_t *node)
         return (node->token->type & MyHTML_TOKEN_TYPE_CLOSE_SELF);
     
     return false;
+}
+
+bool myhtml_node_is_void_element(myhtml_tree_node_t *node)
+{
+    // http://w3c.github.io/html-reference/syntax.html#void-elements
+    switch (node->tag_id)
+    {
+        case MyHTML_TAG_AREA:
+        case MyHTML_TAG_BASE:
+        case MyHTML_TAG_BR:
+        case MyHTML_TAG_COL:
+        case MyHTML_TAG_COMMAND:
+        case MyHTML_TAG_EMBED:
+        case MyHTML_TAG_HR:
+        case MyHTML_TAG_IMG:
+        case MyHTML_TAG_INPUT:
+        case MyHTML_TAG_KEYGEN:
+        case MyHTML_TAG_LINK:
+        case MyHTML_TAG_META:
+        case MyHTML_TAG_PARAM:
+        case MyHTML_TAG_SOURCE:
+        case MyHTML_TAG_TRACK:
+        case MyHTML_TAG_WBR:
+        {
+            return true;
+        }
+        default:
+        {
+            return false;
+        }
+    }
 }
 
 myhtml_tree_attr_t * myhtml_node_attribute_first(myhtml_tree_node_t *node)
@@ -697,7 +820,7 @@ const char * myhtml_node_text(myhtml_tree_node_t *node, size_t *length)
     return NULL;
 }
 
-myhtml_string_t * myhtml_node_string(myhtml_tree_node_t *node)
+mycore_string_t * myhtml_node_string(myhtml_tree_node_t *node)
 {
     if(node && node->token)
         return &node->token->str;
@@ -705,7 +828,7 @@ myhtml_string_t * myhtml_node_string(myhtml_tree_node_t *node)
     return NULL;
 }
 
-myhtml_position_t myhtml_node_raw_pasition(myhtml_tree_node_t *node)
+myhtml_position_t myhtml_node_raw_position(myhtml_tree_node_t *node)
 {
     if(node && node->token)
         return (myhtml_position_t){node->token->raw_begin, node->token->raw_length};
@@ -713,7 +836,7 @@ myhtml_position_t myhtml_node_raw_pasition(myhtml_tree_node_t *node)
     return (myhtml_position_t){0, 0};
 }
 
-myhtml_position_t myhtml_node_element_pasition(myhtml_tree_node_t *node)
+myhtml_position_t myhtml_node_element_position(myhtml_tree_node_t *node)
 {
     if(node && node->token)
         return (myhtml_position_t){node->token->element_begin, node->token->element_length};
@@ -721,7 +844,22 @@ myhtml_position_t myhtml_node_element_pasition(myhtml_tree_node_t *node)
     return (myhtml_position_t){0, 0};
 }
 
-myhtml_status_t myhtml_get_nodes_by_attribute_key_recursion(myhtml_tree_t *tree, myhtml_tree_node_t* node, myhtml_collection_t* collection, const char* key, size_t key_len)
+void myhtml_node_set_data(myhtml_tree_node_t *node, void* data)
+{
+    node->data = data;
+}
+
+void * myhtml_node_get_data(myhtml_tree_node_t *node)
+{
+    return node->data;
+}
+
+myhtml_tree_t * myhtml_node_tree(myhtml_tree_node_t *node)
+{
+    return node->tree;
+}
+
+mystatus_t myhtml_get_nodes_by_attribute_key_recursion(myhtml_tree_node_t* node, myhtml_collection_t* collection, const char* key, size_t key_len)
 {
     while(node)
     {
@@ -729,14 +867,14 @@ myhtml_status_t myhtml_get_nodes_by_attribute_key_recursion(myhtml_tree_t *tree,
             myhtml_tree_attr_t* attr = node->token->attr_first;
             
             while(attr) {
-                myhtml_string_t* str_key = &attr->key;
+                mycore_string_t* str_key = &attr->key;
                 
-                if(str_key->length == key_len && myhtml_strncasecmp(str_key->data, key, key_len) == 0) {
+                if(str_key->length == key_len && mycore_strncasecmp(str_key->data, key, key_len) == 0) {
                     collection->list[ collection->length ] = node;
                     
                     collection->length++;
                     if(collection->length >= collection->size) {
-                        myhtml_status_t status = myhtml_collection_check_size(collection, 1024, 0);
+                        mystatus_t status = myhtml_collection_check_size(collection, 1024, 0);
                         
                         if(status)
                             return status;
@@ -748,7 +886,7 @@ myhtml_status_t myhtml_get_nodes_by_attribute_key_recursion(myhtml_tree_t *tree,
         }
         
         if(node->child) {
-            myhtml_status_t status = myhtml_get_nodes_by_attribute_key_recursion(tree, node->child, collection, key, key_len);
+            mystatus_t status = myhtml_get_nodes_by_attribute_key_recursion(node->child, collection, key, key_len);
             
             if(status)
                 return status;
@@ -760,7 +898,7 @@ myhtml_status_t myhtml_get_nodes_by_attribute_key_recursion(myhtml_tree_t *tree,
     return MyHTML_STATUS_OK;
 }
 
-myhtml_collection_t * myhtml_get_nodes_by_attribute_key(myhtml_tree_t *tree, myhtml_collection_t* collection, myhtml_tree_node_t* scope_node, const char* key, size_t key_len, myhtml_status_t* status)
+myhtml_collection_t * myhtml_get_nodes_by_attribute_key(myhtml_tree_t *tree, myhtml_collection_t* collection, myhtml_tree_node_t* scope_node, const char* key, size_t key_len, mystatus_t* status)
 {
     if(collection == NULL) {
         collection = myhtml_collection_create(1024, status);
@@ -772,7 +910,7 @@ myhtml_collection_t * myhtml_get_nodes_by_attribute_key(myhtml_tree_t *tree, myh
     if(scope_node == NULL)
         scope_node = tree->node_html;
     
-    myhtml_status_t rec_status = myhtml_get_nodes_by_attribute_key_recursion(tree, scope_node, collection, key, key_len);
+    mystatus_t rec_status = myhtml_get_nodes_by_attribute_key_recursion(scope_node, collection, key, key_len);
     
     if(rec_status && status)
         *status = rec_status;
@@ -781,28 +919,28 @@ myhtml_collection_t * myhtml_get_nodes_by_attribute_key(myhtml_tree_t *tree, myh
 }
 
 /* find by attribute value; case-sensitivity */
-bool myhtml_get_nodes_by_attribute_value_recursion_eq(myhtml_string_t* str, const char* value, size_t value_len)
+bool myhtml_get_nodes_by_attribute_value_recursion_eq(mycore_string_t* str, const char* value, size_t value_len)
 {
-    return str->length == value_len && myhtml_strncmp(str->data, value, value_len) == 0;
+    return str->length == value_len && mycore_strncmp(str->data, value, value_len) == 0;
 }
 
-bool myhtml_get_nodes_by_attribute_value_recursion_whitespace_separated(myhtml_string_t* str, const char* value, size_t value_len)
+bool myhtml_get_nodes_by_attribute_value_recursion_whitespace_separated(mycore_string_t* str, const char* value, size_t value_len)
 {
     if(str->length < value_len)
         return false;
     
     const char *data = str->data;
     
-    if(myhtml_strncmp(data, value, value_len) == 0) {
-        if((str->length > value_len && myhtml_utils_whithspace(data[value_len], ==, ||)) || str->length == value_len)
+    if(mycore_strncmp(data, value, value_len) == 0) {
+        if((str->length > value_len && mycore_utils_whithspace(data[value_len], ==, ||)) || str->length == value_len)
             return true;
     }
     
     for(size_t i = 1; (str->length - i) >= value_len; i++)
     {
-        if(myhtml_utils_whithspace(data[(i - 1)], ==, ||)) {
-            if(myhtml_strncmp(&data[i], value, value_len) == 0) {
-                if((i > value_len && myhtml_utils_whithspace(data[(i + value_len)], ==, ||)) || (str->length - i) == value_len)
+        if(mycore_utils_whithspace(data[(i - 1)], ==, ||)) {
+            if(mycore_strncmp(&data[i], value, value_len) == 0) {
+                if((i > value_len && mycore_utils_whithspace(data[(i + value_len)], ==, ||)) || (str->length - i) == value_len)
                     return true;
             }
         }
@@ -811,23 +949,23 @@ bool myhtml_get_nodes_by_attribute_value_recursion_whitespace_separated(myhtml_s
     return false;
 }
 
-bool myhtml_get_nodes_by_attribute_value_recursion_begin(myhtml_string_t* str, const char* value, size_t value_len)
+bool myhtml_get_nodes_by_attribute_value_recursion_begin(mycore_string_t* str, const char* value, size_t value_len)
 {
     if(str->length < value_len)
         return false;
     
-    return myhtml_strncmp(str->data, value, value_len) == 0;
+    return mycore_strncmp(str->data, value, value_len) == 0;
 }
 
-bool myhtml_get_nodes_by_attribute_value_recursion_end(myhtml_string_t* str, const char* value, size_t value_len)
+bool myhtml_get_nodes_by_attribute_value_recursion_end(mycore_string_t* str, const char* value, size_t value_len)
 {
     if(str->length < value_len)
         return false;
     
-    return myhtml_strncmp(&str->data[ (str->length - (str->length - value_len)) ], value, value_len) == 0;
+    return mycore_strncmp(&str->data[ (str->length - (str->length - value_len)) ], value, value_len) == 0;
 }
 
-bool myhtml_get_nodes_by_attribute_value_recursion_contain(myhtml_string_t* str, const char* value, size_t value_len)
+bool myhtml_get_nodes_by_attribute_value_recursion_contain(mycore_string_t* str, const char* value, size_t value_len)
 {
     if(str->length < value_len)
         return false;
@@ -836,7 +974,7 @@ bool myhtml_get_nodes_by_attribute_value_recursion_contain(myhtml_string_t* str,
     
     for(size_t i = 0; (str->length - i) >= value_len; i++)
     {
-        if(myhtml_strncmp(&data[i], value, value_len) == 0) {
+        if(mycore_strncmp(&data[i], value, value_len) == 0) {
             return true;
         }
     }
@@ -844,16 +982,16 @@ bool myhtml_get_nodes_by_attribute_value_recursion_contain(myhtml_string_t* str,
     return false;
 }
 
-bool myhtml_get_nodes_by_attribute_value_recursion_hyphen_separated(myhtml_string_t* str, const char* value, size_t value_len)
+bool myhtml_get_nodes_by_attribute_value_recursion_hyphen_separated(mycore_string_t* str, const char* value, size_t value_len)
 {
     const char *data = str->data;
     
     if(str->length < value_len)
         return false;
-    else if(str->length == value_len && myhtml_strncmp(data, value, value_len) == 0) {
+    else if(str->length == value_len && mycore_strncmp(data, value, value_len) == 0) {
         return true;
     }
-    else if(myhtml_strncmp(data, value, value_len) == 0 && data[value_len] == '-') {
+    else if(mycore_strncmp(data, value, value_len) == 0 && data[value_len] == '-') {
         return true;
     }
     
@@ -861,28 +999,28 @@ bool myhtml_get_nodes_by_attribute_value_recursion_hyphen_separated(myhtml_strin
 }
 
 /* find by attribute value; case-insensitive */
-bool myhtml_get_nodes_by_attribute_value_recursion_eq_i(myhtml_string_t* str, const char* value, size_t value_len)
+bool myhtml_get_nodes_by_attribute_value_recursion_eq_i(mycore_string_t* str, const char* value, size_t value_len)
 {
-    return str->length == value_len && myhtml_strncasecmp(str->data, value, value_len) == 0;
+    return str->length == value_len && mycore_strncasecmp(str->data, value, value_len) == 0;
 }
 
-bool myhtml_get_nodes_by_attribute_value_recursion_whitespace_separated_i(myhtml_string_t* str, const char* value, size_t value_len)
+bool myhtml_get_nodes_by_attribute_value_recursion_whitespace_separated_i(mycore_string_t* str, const char* value, size_t value_len)
 {
     if(str->length < value_len)
         return false;
     
     const char *data = str->data;
     
-    if(myhtml_strncasecmp(data, value, value_len) == 0) {
-        if((str->length > value_len && myhtml_utils_whithspace(data[value_len], ==, ||)) || str->length == value_len)
+    if(mycore_strncasecmp(data, value, value_len) == 0) {
+        if((str->length > value_len && mycore_utils_whithspace(data[value_len], ==, ||)) || str->length == value_len)
             return true;
     }
     
     for(size_t i = 1; (str->length - i) >= value_len; i++)
     {
-        if(myhtml_utils_whithspace(data[(i - 1)], ==, ||)) {
-            if(myhtml_strncasecmp(&data[i], value, value_len) == 0) {
-                if((i > value_len && myhtml_utils_whithspace(data[(i + value_len)], ==, ||)) || (str->length - i) == value_len)
+        if(mycore_utils_whithspace(data[(i - 1)], ==, ||)) {
+            if(mycore_strncasecmp(&data[i], value, value_len) == 0) {
+                if((i > value_len && mycore_utils_whithspace(data[(i + value_len)], ==, ||)) || (str->length - i) == value_len)
                     return true;
             }
         }
@@ -891,23 +1029,23 @@ bool myhtml_get_nodes_by_attribute_value_recursion_whitespace_separated_i(myhtml
     return false;
 }
 
-bool myhtml_get_nodes_by_attribute_value_recursion_begin_i(myhtml_string_t* str, const char* value, size_t value_len)
+bool myhtml_get_nodes_by_attribute_value_recursion_begin_i(mycore_string_t* str, const char* value, size_t value_len)
 {
     if(str->length < value_len)
         return false;
     
-    return myhtml_strncasecmp(str->data, value, value_len) == 0;
+    return mycore_strncasecmp(str->data, value, value_len) == 0;
 }
 
-bool myhtml_get_nodes_by_attribute_value_recursion_end_i(myhtml_string_t* str, const char* value, size_t value_len)
+bool myhtml_get_nodes_by_attribute_value_recursion_end_i(mycore_string_t* str, const char* value, size_t value_len)
 {
     if(str->length < value_len)
         return false;
     
-    return myhtml_strncasecmp(&str->data[ (str->length - (str->length - value_len)) ], value, value_len) == 0;
+    return mycore_strncasecmp(&str->data[ (str->length - (str->length - value_len)) ], value, value_len) == 0;
 }
 
-bool myhtml_get_nodes_by_attribute_value_recursion_contain_i(myhtml_string_t* str, const char* value, size_t value_len)
+bool myhtml_get_nodes_by_attribute_value_recursion_contain_i(mycore_string_t* str, const char* value, size_t value_len)
 {
     if(str->length < value_len)
         return false;
@@ -916,7 +1054,7 @@ bool myhtml_get_nodes_by_attribute_value_recursion_contain_i(myhtml_string_t* st
     
     for(size_t i = 0; (str->length - i) >= value_len; i++)
     {
-        if(myhtml_strncasecmp(&data[i], value, value_len) == 0) {
+        if(mycore_strncasecmp(&data[i], value, value_len) == 0) {
             return true;
         }
     }
@@ -924,16 +1062,16 @@ bool myhtml_get_nodes_by_attribute_value_recursion_contain_i(myhtml_string_t* st
     return false;
 }
 
-bool myhtml_get_nodes_by_attribute_value_recursion_hyphen_separated_i(myhtml_string_t* str, const char* value, size_t value_len)
+bool myhtml_get_nodes_by_attribute_value_recursion_hyphen_separated_i(mycore_string_t* str, const char* value, size_t value_len)
 {
     const char *data = str->data;
     
     if(str->length < value_len)
         return false;
-    else if(str->length == value_len && myhtml_strncasecmp(data, value, value_len) == 0) {
+    else if(str->length == value_len && mycore_strncasecmp(data, value, value_len) == 0) {
         return true;
     }
-    else if(myhtml_strncasecmp(data, value, value_len) == 0 && data[value_len] == '-') {
+    else if(mycore_strncasecmp(data, value, value_len) == 0 && data[value_len] == '-') {
         return true;
     }
     
@@ -941,8 +1079,7 @@ bool myhtml_get_nodes_by_attribute_value_recursion_hyphen_separated_i(myhtml_str
 }
 
 /* find by attribute value; basic functions */
-myhtml_status_t myhtml_get_nodes_by_attribute_value_recursion(myhtml_tree_t *tree, myhtml_tree_node_t* node,
-                                                              myhtml_collection_t* collection,
+mystatus_t myhtml_get_nodes_by_attribute_value_recursion(myhtml_tree_node_t* node, myhtml_collection_t* collection,
                                                               myhtml_attribute_value_find_f func_eq,
                                                               const char* value, size_t value_len)
 {
@@ -952,14 +1089,14 @@ myhtml_status_t myhtml_get_nodes_by_attribute_value_recursion(myhtml_tree_t *tre
             myhtml_tree_attr_t* attr = node->token->attr_first;
             
             while(attr) {
-                myhtml_string_t* str = &attr->value;
+                mycore_string_t* str = &attr->value;
                 
                 if(func_eq(str, value, value_len)) {
                     collection->list[ collection->length ] = node;
                     
                     collection->length++;
                     if(collection->length >= collection->size) {
-                        myhtml_status_t status = myhtml_collection_check_size(collection, 1024, 0);
+                        mystatus_t status = myhtml_collection_check_size(collection, 1024, 0);
                         
                         if(status)
                             return status;
@@ -971,7 +1108,7 @@ myhtml_status_t myhtml_get_nodes_by_attribute_value_recursion(myhtml_tree_t *tre
         }
         
         if(node->child) {
-            myhtml_status_t status = myhtml_get_nodes_by_attribute_value_recursion(tree, node->child, collection, func_eq, value, value_len);
+            mystatus_t status = myhtml_get_nodes_by_attribute_value_recursion(node->child, collection, func_eq, value, value_len);
             
             if(status)
                 return status;
@@ -983,8 +1120,7 @@ myhtml_status_t myhtml_get_nodes_by_attribute_value_recursion(myhtml_tree_t *tre
     return MyHTML_STATUS_OK;
 }
 
-myhtml_status_t myhtml_get_nodes_by_attribute_value_recursion_by_key(myhtml_tree_t *tree, myhtml_tree_node_t* node,
-                                                                     myhtml_collection_t* collection,
+mystatus_t myhtml_get_nodes_by_attribute_value_recursion_by_key(myhtml_tree_node_t* node, myhtml_collection_t* collection,
                                                                      myhtml_attribute_value_find_f func_eq,
                                                                      const char* key, size_t key_len,
                                                                      const char* value, size_t value_len)
@@ -995,17 +1131,17 @@ myhtml_status_t myhtml_get_nodes_by_attribute_value_recursion_by_key(myhtml_tree
             myhtml_tree_attr_t* attr = node->token->attr_first;
             
             while(attr) {
-                myhtml_string_t* str_key = &attr->key;
-                myhtml_string_t* str = &attr->value;
+                mycore_string_t* str_key = &attr->key;
+                mycore_string_t* str = &attr->value;
                 
-                if(str_key->length == key_len && myhtml_strncasecmp(str_key->data, key, key_len) == 0)
+                if(str_key->length == key_len && mycore_strncasecmp(str_key->data, key, key_len) == 0)
                 {
                     if(func_eq(str, value, value_len)) {
                         collection->list[ collection->length ] = node;
                         
                         collection->length++;
                         if(collection->length >= collection->size) {
-                            myhtml_status_t status = myhtml_collection_check_size(collection, 1024, 0);
+                            mystatus_t status = myhtml_collection_check_size(collection, 1024, 0);
                             
                             if(status)
                                 return status;
@@ -1018,7 +1154,7 @@ myhtml_status_t myhtml_get_nodes_by_attribute_value_recursion_by_key(myhtml_tree
         }
         
         if(node->child) {
-            myhtml_status_t status = myhtml_get_nodes_by_attribute_value_recursion_by_key(tree, node->child, collection, func_eq,
+            mystatus_t status = myhtml_get_nodes_by_attribute_value_recursion_by_key(node->child, collection, func_eq,
                                                                                           key, key_len, value, value_len);
             
             if(status)
@@ -1035,7 +1171,7 @@ myhtml_collection_t * _myhtml_get_nodes_by_attribute_value(myhtml_tree_t *tree, 
                                                            myhtml_attribute_value_find_f func_eq,
                                                            const char* key, size_t key_len,
                                                            const char* value, size_t value_len,
-                                                           myhtml_status_t* status)
+                                                           mystatus_t* status)
 {
     if(collection == NULL) {
         collection = myhtml_collection_create(1024, status);
@@ -1047,12 +1183,12 @@ myhtml_collection_t * _myhtml_get_nodes_by_attribute_value(myhtml_tree_t *tree, 
     if(node == NULL)
         node = tree->node_html;
     
-    myhtml_status_t rec_status;
+    mystatus_t rec_status;
     
     if(key && key_len)
-        rec_status = myhtml_get_nodes_by_attribute_value_recursion_by_key(tree, node, collection, func_eq, key, key_len, value, value_len);
+        rec_status = myhtml_get_nodes_by_attribute_value_recursion_by_key(node, collection, func_eq, key, key_len, value, value_len);
     else
-        rec_status = myhtml_get_nodes_by_attribute_value_recursion(tree, node, collection, func_eq, value, value_len);
+        rec_status = myhtml_get_nodes_by_attribute_value_recursion(node, collection, func_eq, value, value_len);
     
     if(rec_status && status)
         *status = rec_status;
@@ -1064,7 +1200,7 @@ myhtml_collection_t * myhtml_get_nodes_by_attribute_value(myhtml_tree_t *tree, m
                                                           bool case_insensitive,
                                                           const char* key, size_t key_len,
                                                           const char* value, size_t value_len,
-                                                          myhtml_status_t* status)
+                                                          mystatus_t* status)
 {
     if(case_insensitive) {
         return _myhtml_get_nodes_by_attribute_value(tree, collection, node,
@@ -1081,7 +1217,7 @@ myhtml_collection_t * myhtml_get_nodes_by_attribute_value_whitespace_separated(m
                                                                                bool case_insensitive,
                                                                                const char* key, size_t key_len,
                                                                                const char* value, size_t value_len,
-                                                                               myhtml_status_t* status)
+                                                                               mystatus_t* status)
 {
     if(case_insensitive) {
         return _myhtml_get_nodes_by_attribute_value(tree, collection, node,
@@ -1098,7 +1234,7 @@ myhtml_collection_t * myhtml_get_nodes_by_attribute_value_begin(myhtml_tree_t *t
                                                                 bool case_insensitive,
                                                                 const char* key, size_t key_len,
                                                                 const char* value, size_t value_len,
-                                                                myhtml_status_t* status)
+                                                                mystatus_t* status)
 {
     if(case_insensitive) {
         return _myhtml_get_nodes_by_attribute_value(tree, collection, node,
@@ -1115,7 +1251,7 @@ myhtml_collection_t * myhtml_get_nodes_by_attribute_value_end(myhtml_tree_t *tre
                                                               bool case_insensitive,
                                                               const char* key, size_t key_len,
                                                               const char* value, size_t value_len,
-                                                              myhtml_status_t* status)
+                                                              mystatus_t* status)
 {
     if(case_insensitive) {
         return _myhtml_get_nodes_by_attribute_value(tree, collection, node,
@@ -1132,7 +1268,7 @@ myhtml_collection_t * myhtml_get_nodes_by_attribute_value_contain(myhtml_tree_t 
                                                                   bool case_insensitive,
                                                                   const char* key, size_t key_len,
                                                                   const char* value, size_t value_len,
-                                                                  myhtml_status_t* status)
+                                                                  mystatus_t* status)
 {
     if(case_insensitive) {
         return _myhtml_get_nodes_by_attribute_value(tree, collection, node,
@@ -1149,7 +1285,7 @@ myhtml_collection_t * myhtml_get_nodes_by_attribute_value_hyphen_separated(myhtm
                                                                            bool case_insensitive,
                                                                            const char* key, size_t key_len,
                                                                            const char* value, size_t value_len,
-                                                                           myhtml_status_t* status)
+                                                                           mystatus_t* status)
 {
     if(case_insensitive) {
         return _myhtml_get_nodes_by_attribute_value(tree, collection, node,
@@ -1217,7 +1353,7 @@ const char * myhtml_attribute_value(myhtml_tree_attr_t *attr, size_t *length)
     return NULL;
 }
 
-myhtml_string_t * myhtml_attribute_key_string(myhtml_tree_attr_t* attr)
+mycore_string_t * myhtml_attribute_key_string(myhtml_tree_attr_t* attr)
 {
     if(attr)
         return &attr->key;
@@ -1225,7 +1361,7 @@ myhtml_string_t * myhtml_attribute_key_string(myhtml_tree_attr_t* attr)
     return NULL;
 }
 
-myhtml_string_t * myhtml_attribute_value_string(myhtml_tree_attr_t* attr)
+mycore_string_t * myhtml_attribute_value_string(myhtml_tree_attr_t* attr)
 {
     if(attr)
         return &attr->value;
@@ -1241,23 +1377,22 @@ myhtml_tree_attr_t * myhtml_attribute_by_key(myhtml_tree_node_t *node, const cha
     return myhtml_token_attr_by_name(node->token, key, key_len);
 }
 
-myhtml_tree_attr_t * myhtml_attribute_add(myhtml_tree_t *tree, myhtml_tree_node_t *node, const char *key, size_t key_len, const char *value, size_t value_len, myhtml_encoding_t encoding)
+myhtml_tree_attr_t * myhtml_attribute_add(myhtml_tree_node_t *node, const char *key, size_t key_len, const char *value, size_t value_len, myencoding_t encoding)
 {
     if(node == NULL)
         return NULL;
     
+    myhtml_tree_t *tree = node->tree;
+    
     if(node->token == NULL) {
-        mcobject_async_status_t mcstatus;
-        node->token = (myhtml_token_node_t*)mcobject_async_malloc(tree->token->nodes_obj, tree->mcasync_token_id, &mcstatus);
+        node->token = myhtml_token_node_create(tree->token, tree->mcasync_rules_token_id);
         
-        if(mcstatus)
+        if(node->token == NULL)
             return NULL;
-        
-        myhtml_token_node_clean(node->token);
     }
     
     return myhtml_token_node_attr_append_with_convert_encoding(tree->token, node->token, key, key_len,
-                                                               value, value_len, tree->mcasync_token_id, encoding);
+                                                               value, value_len, tree->mcasync_rules_token_id, encoding);
 }
 
 myhtml_tree_attr_t * myhtml_attribute_remove(myhtml_tree_node_t *node, myhtml_tree_attr_t *attr)
@@ -1314,9 +1449,9 @@ myhtml_position_t myhtml_attribute_value_raw_position(myhtml_tree_attr_t *attr)
 /*
  * Collections
  */
-myhtml_collection_t * myhtml_collection_create(size_t size, myhtml_status_t *status)
+myhtml_collection_t * myhtml_collection_create(size_t size, mystatus_t *status)
 {
-    myhtml_collection_t *collection = (myhtml_collection_t*)myhtml_malloc(sizeof(myhtml_collection_t));
+    myhtml_collection_t *collection = (myhtml_collection_t*)mycore_malloc(sizeof(myhtml_collection_t));
     
     if(collection == NULL) {
         if(status)
@@ -1327,10 +1462,10 @@ myhtml_collection_t * myhtml_collection_create(size_t size, myhtml_status_t *sta
     
     collection->size   = size;
     collection->length = 0;
-    collection->list   = (myhtml_tree_node_t **)myhtml_malloc(sizeof(myhtml_tree_node_t*) * size);
+    collection->list   = (myhtml_tree_node_t **)mycore_malloc(sizeof(myhtml_tree_node_t*) * size);
     
     if(collection->list == NULL) {
-        myhtml_free(collection);
+        mycore_free(collection);
         
         if(status)
             *status = MyHTML_STATUS_ERROR_MEMORY_ALLOCATION;
@@ -1344,17 +1479,16 @@ myhtml_collection_t * myhtml_collection_create(size_t size, myhtml_status_t *sta
     return collection;
 }
 
-myhtml_status_t myhtml_collection_check_size(myhtml_collection_t *collection, size_t need, size_t upto_length)
+mystatus_t myhtml_collection_check_size(myhtml_collection_t *collection, size_t need, size_t upto_length)
 {
     if((collection->length + need) >= collection->size)
     {
         size_t tmp_size = collection->length + need + upto_length + 1;
-        myhtml_tree_node_t **tmp = (myhtml_tree_node_t **)myhtml_realloc(collection->list, sizeof(myhtml_tree_node_t*) * tmp_size);
+        myhtml_tree_node_t **tmp = (myhtml_tree_node_t **)mycore_realloc(collection->list, sizeof(myhtml_tree_node_t*) * tmp_size);
         
         if(tmp) {
-            collection->length  = upto_length;
-            collection->size    = tmp_size;
-            collection->list    = tmp;
+            collection->size = tmp_size;
+            collection->list = tmp;
         }
         else
             return MyHTML_STATUS_ERROR_MEMORY_ALLOCATION;
@@ -1375,16 +1509,18 @@ myhtml_collection_t * myhtml_collection_destroy(myhtml_collection_t *collection)
         return NULL;
     
     if(collection->list)
-        myhtml_free(collection->list);
+        mycore_free(collection->list);
     
-    myhtml_free(collection);
+    mycore_free(collection);
     
     return NULL;
 }
 
 /* queue */
-void myhtml_queue_add(myhtml_tree_t *tree, size_t begin, myhtml_token_node_t* token)
+mystatus_t myhtml_queue_add(myhtml_tree_t *tree, size_t begin, myhtml_token_node_t* token)
 {
+    // TODO: need refactoring this code
+    // too many conditions
     mythread_queue_node_t *qnode = tree->current_qnode;
     
     if(tree->parse_flags & MyHTML_TREE_PARSE_FLAGS_SKIP_WHITESPACE_TOKEN) {
@@ -1393,42 +1529,64 @@ void myhtml_queue_add(myhtml_tree_t *tree, size_t begin, myhtml_token_node_t* to
             myhtml_token_node_clean(token);
             token->raw_begin = token->element_begin = (tree->global_offset + begin);
             
-            return;
+            return MyHTML_STATUS_OK;
         }
     }
     
-    qnode->token = token;
-    
-#ifndef MyHTML_BUILD_WITHOUT_THREADS
+#ifndef MyCORE_BUILD_WITHOUT_THREADS
     
     if(tree->flags & MyHTML_TREE_FLAGS_SINGLE_MODE) {
-        myhtml_parser_worker(0, qnode);
-        while(myhtml_rules_tree_dispatcher(tree, token)){};
+        if(qnode && token) {
+            qnode->args = token;
+            
+            myhtml_parser_worker(0, qnode);
+            myhtml_parser_stream(0, qnode);
+        }
         
-        tree->current_qnode = mythread_queue_node_malloc_limit(tree->myhtml->thread, tree->queue, 4, NULL);
+        tree->current_qnode = mythread_queue_node_malloc_limit(tree->myhtml->thread_stream, tree->queue, 4, NULL);
     }
     else {
-        tree->current_qnode = mythread_queue_node_malloc_round(tree->myhtml->thread, tree->queue_entry, NULL);
+        if(qnode)
+            qnode->args = token;
+        
+        tree->current_qnode = mythread_queue_node_malloc_round(tree->myhtml->thread_stream, tree->queue_entry);
+        
+        /* we have a clean queue list */
+        if(tree->queue_entry->queue->nodes_length == 0) {
+            mythread_queue_list_entry_make_batch(tree->myhtml->thread_batch, tree->queue_entry);
+            mythread_queue_list_entry_make_stream(tree->myhtml->thread_stream, tree->queue_entry);
+        }
     }
     
 #else
     
-    myhtml_parser_worker(0, qnode);
-    while(myhtml_rules_tree_dispatcher(tree, token)){};
+    if(qnode && token) {
+        qnode->args = token;
+        
+        myhtml_parser_worker(0, qnode);
+        myhtml_parser_stream(0, qnode);
+    }
     
-    tree->current_qnode = mythread_queue_node_malloc_limit(tree->myhtml->thread, tree->queue, 4, NULL);
+    tree->current_qnode = mythread_queue_node_malloc_limit(tree->myhtml->thread_stream, tree->queue, 4, NULL);
     
-#endif /* MyHTML_BUILD_WITHOUT_THREADS */
+#endif /* MyCORE_BUILD_WITHOUT_THREADS */
     
-    tree->current_qnode->tree = tree;
+    if(tree->current_qnode == NULL)
+        return MyHTML_STATUS_ERROR_MEMORY_ALLOCATION;
+    
+    tree->current_qnode->context = tree;
     tree->current_qnode->prev = qnode;
     
-    if(qnode)
+    if(qnode && token)
         myhtml_tokenizer_calc_current_namespace(tree, token);
     
-    myhtml_token_node_malloc(tree->token, tree->current_token_node, tree->token->mcasync_token_id);
+    tree->current_token_node = myhtml_token_node_create(tree->token, tree->token->mcasync_token_id);
+    if(tree->current_token_node == NULL)
+        return MyHTML_STATUS_ERROR_MEMORY_ALLOCATION;
     
     tree->current_token_node->raw_begin = tree->current_token_node->element_begin = (tree->global_offset + begin);
+    
+    return MyHTML_STATUS_OK;
 }
 
 bool myhtml_utils_strcmp(const char* ab, const char* to_lowercase, size_t size)
