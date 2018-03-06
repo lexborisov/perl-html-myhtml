@@ -29,7 +29,7 @@ join_text($myhtml, $tree, $tree->document->child, $list) if $tree->document->chi
 print join("\n", @$list);
 
 $tree->destroy();
-
+$myhtml->destroy();
 
 sub join_text {
 	my ($myhtml, $tree, $node, $res) = @_;
@@ -58,7 +58,3 @@ sub join_text {
 		$node = $node->next;
 	}
 }
-
-
-
-

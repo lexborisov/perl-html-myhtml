@@ -110,7 +110,7 @@ HTML::MyHTML is a fast HTML Parser using Threads with no outside dependencies
 
 =head1 DESCRIPTION
 
-This Parser based on L<MyHTML library|https://github.com/lexborisov/myhtml>  (it includes version 1.0.2)
+This Parser based on L<MyHTML library|https://github.com/lexborisov/myhtml>  (it includes version 4.0.4)
 
 =over 4
 

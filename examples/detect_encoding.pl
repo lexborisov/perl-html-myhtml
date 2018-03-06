@@ -28,4 +28,4 @@ $tree->document->print_children(*STDOUT);
 
 
 $tree->destroy();
-
+$myhtml->destroy();
